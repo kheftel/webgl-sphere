@@ -2,13 +2,15 @@ define(["require", "exports", "./Matrix"], function (require, exports, Matrix_1)
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var Mesh = /** @class */ (function () {
-        function Mesh(name) {
+        function Mesh(name, gl) {
+            this.gl = gl;
             this.name = name;
             this.modelMatrix = Matrix_1.default.create();
             this.normalMatrix = Matrix_1.default.create();
             this.is2D = false;
         }
-        Mesh.prototype.prepBuffers = function (gl) {
+        Mesh.prototype.prepBuffers = function () {
+            var gl = this.gl;
             this.vertexBuffer = gl.createBuffer();
             gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
             gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.vertices), gl.STATIC_DRAW);
@@ -26,7 +28,17 @@ define(["require", "exports", "./Matrix"], function (require, exports, Matrix_1)
             gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(this.indices), gl.STATIC_DRAW);
             this.uloc_sampler = gl.getUniformLocation(this.shader.shaderProgram, 'u_Sampler');
         };
-        Mesh.prototype.beforeDraw = function (gl) {
+        Mesh.prototype.deleteBuffers = function () {
+            var gl = this.gl;
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+            gl.deleteBuffer(this.vertexBuffer);
+            gl.deleteBuffer(this.normalBuffer);
+            gl.deleteBuffer(this.uvBuffer);
+            gl.deleteBuffer(this.indexBuffer);
+        };
+        Mesh.prototype.beforeDraw = function () {
+            var gl = this.gl;
             this.updateNormalMatrix();
             gl.uniformMatrix4fv(this.shader.uloc_Model, false, this.modelMatrix);
             gl.uniformMatrix4fv(this.shader.uloc_Normal, false, this.normalMatrix);
@@ -54,8 +66,12 @@ define(["require", "exports", "./Matrix"], function (require, exports, Matrix_1)
                 gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
             }
         };
-        Mesh.prototype.draw = function (gl) {
-            gl.drawElements(gl.TRIANGLES, this.indices.length, gl.UNSIGNED_SHORT, 0);
+        Mesh.prototype.draw = function (mode) {
+            if (mode === void 0) { mode = null; }
+            var gl = this.gl;
+            if (mode === null)
+                mode = gl.TRIANGLES;
+            gl.drawElements(mode, this.indices.length, gl.UNSIGNED_SHORT, 0);
         };
         Mesh.prototype.updateNormalMatrix = function () {
             Matrix_1.default.invert(this.normalMatrix, this.modelMatrix);

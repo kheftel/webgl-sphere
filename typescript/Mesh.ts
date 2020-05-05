@@ -2,6 +2,7 @@ import Matrix from "./Matrix";
 import IShaderProgram from "./IShaderProgram";
 
 export default class Mesh {
+	public gl:WebGLRenderingContext;
 	public vertices: number[];
 	public normals: number[];
 	public uvs: number[];
@@ -22,7 +23,8 @@ export default class Mesh {
 	public aloc_uv:number;
 	public uloc_sampler:WebGLUniformLocation;
 
-	public prepBuffers(gl: WebGLRenderingContext) {
+	public prepBuffers() {
+		var gl = this.gl;
 		this.vertexBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
 		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.vertices), gl.STATIC_DRAW);
@@ -45,7 +47,18 @@ export default class Mesh {
 		this.uloc_sampler = gl.getUniformLocation(this.shader.shaderProgram, 'u_Sampler');
 	}
 
-	public beforeDraw(gl: WebGLRenderingContext) {
+	public deleteBuffers() {
+		var gl = this.gl;
+		gl.bindBuffer(gl.ARRAY_BUFFER, null);
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+		gl.deleteBuffer(this.vertexBuffer);
+		gl.deleteBuffer(this.normalBuffer);
+		gl.deleteBuffer(this.uvBuffer);
+		gl.deleteBuffer(this.indexBuffer);
+	}
+
+	public beforeDraw() {
+		var gl = this.gl;
 		this.updateNormalMatrix();
 		gl.uniformMatrix4fv(this.shader.uloc_Model, false, this.modelMatrix);
 		gl.uniformMatrix4fv(this.shader.uloc_Normal, false, this.normalMatrix);
@@ -80,8 +93,10 @@ export default class Mesh {
 		}
 	}
 
-	public draw(gl: WebGLRenderingContext) {
-		gl.drawElements(gl.TRIANGLES, this.indices.length, gl.UNSIGNED_SHORT, 0);
+	public draw(mode:any = null) {
+		var gl = this.gl;
+		if(mode === null) mode = gl.TRIANGLES;
+		gl.drawElements(mode, this.indices.length, gl.UNSIGNED_SHORT, 0);
 	}
 
 	public updateNormalMatrix() {
@@ -89,7 +104,8 @@ export default class Mesh {
 		Matrix.transpose(this.normalMatrix, this.normalMatrix);
 	}
 
-	constructor(name:string) {
+	constructor(name:string, gl:WebGLRenderingContext) {
+		this.gl = gl;
 		this.name = name;
 		this.modelMatrix = Matrix.create();
 		this.normalMatrix = Matrix.create();
