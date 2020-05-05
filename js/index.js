@@ -1,5 +1,5 @@
 // Following http://www.tutorialspoint.com/webgl/webgl_modes_of_drawing.htm
-define(["require", "exports", "./Mesh", "./Sphere", "./Matrix"], function (require, exports, Mesh_1, Sphere_1, Matrix_1) {
+define(["require", "exports", "./Mesh", "./Sphere", "./Matrix", "./Quad"], function (require, exports, Mesh_1, Sphere_1, Matrix_1, Quad_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var App = /** @class */ (function () {
@@ -30,32 +30,15 @@ define(["require", "exports", "./Mesh", "./Sphere", "./Matrix"], function (requi
         }
         App.prototype._setData = function () {
             var gl = this._gl;
+            var q = new Quad_1.default(2, 2);
             var backdrop = new Mesh_1.default('backdrop');
             backdrop.isOpaque = true;
             backdrop.is2D = true;
             backdrop.shader = this._defaultShader;
-            backdrop.vertices = [
-                -1, 1, 0,
-                1, 1, 0,
-                -1, -1, 0,
-                1, -1, 0
-            ];
-            backdrop.normals = [
-                0, 0, 1,
-                0, 0, 1,
-                0, 0, 1,
-                0, 0, 1
-            ];
-            backdrop.uvs = [
-                0, 0,
-                0, 1,
-                1, 0,
-                1, 1
-            ];
-            backdrop.indices = [
-                0, 1, 2,
-                2, 1, 3
-            ];
+            backdrop.vertices = q.getVertices();
+            backdrop.normals = q.getNormals();
+            backdrop.uvs = q.getUVs();
+            backdrop.indices = q.getIndices();
             backdrop.texture = this._textures['stars'];
             backdrop.prepBuffers(gl);
             Matrix_1.default.scale(backdrop.modelMatrix, backdrop.modelMatrix, [1, 1, 0]);

@@ -4,6 +4,7 @@ import Mesh from "./Mesh";
 import Sphere from "./Sphere";
 import Matrix from "./Matrix";
 import IShaderProgram from "./IShaderProgram";
+import Quad from "./Quad";
 
 class App {
 	private _canvas: HTMLCanvasElement;
@@ -64,28 +65,15 @@ class App {
 	private _setData() {
 		var gl = this._gl;
 
+		var q = new Quad(2, 2);
 		var backdrop = new Mesh('backdrop');
 		backdrop.isOpaque = true;
 		backdrop.is2D = true;
 		backdrop.shader = this._defaultShader;
-		backdrop.vertices = [
-			-1, 1, 0,
-			1, 1, 0,
-			-1, -1, 0,
-			1, -1, 0];
-		backdrop.normals = [
-			0, 0, 1,
-			0, 0, 1,
-			0, 0, 1,
-			0, 0, 1];
-		backdrop.uvs = [
-			0, 0,
-			0, 1,
-			1, 0,
-			1, 1];
-		backdrop.indices = [
-			0, 1, 2,
-			2, 1, 3];
+		backdrop.vertices = q.getVertices();
+		backdrop.normals = q.getNormals();
+		backdrop.uvs = q.getUVs();
+		backdrop.indices = q.getIndices();
 		backdrop.texture = this._textures['stars'];
 		backdrop.prepBuffers(gl);
 		Matrix.scale(backdrop.modelMatrix, backdrop.modelMatrix, [1, 1, 0]);
