@@ -1,56 +1,62 @@
 <!DOCTYPE html>
-<html >
-  <head>
-    <meta charset="UTF-8">
-    <title>WebGL Sphere</title>
-    <link rel="stylesheet" href="css/style.css">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  </head>
-  <body>
-    <div class="controls">
-      <h3>Rendering</h3>
-      <select id="drawMode">
-        <option disabled selected>Draw mode</option>
-        <option value="POINTS">Points</option>
-        <option value="LINES">Lines</option>
-        <option value="LINE_STRIP">Line Strip</option>
-        <option value="LINE_LOOP">Line Loop</option>
-        <option value="TRIANGLES">Triangles *</option>
-        <option value="TRIANGLE_STRIP">Triangle Strip</option>
-        <option value="TRIANGLE_FAN">Triangle Fan</option>
-      </select>
-      
-      <select id="quality">
-        <option disabled selected>Quality</option>
-        <option value="0">Basic</option>
-        <option value="1">Simple</option>
-        <option value="2">Better</option>
-        <option value="3">Best *</option>
-      </select>
-      
-      <span>* denotes default values</span>
+<html>
 
-      <h3>Rotation</h3>
-      <div class="sliderGroup clearfix">
-        <input type="text" id="sliderInputX" disabled/>
-        <input type="range" id="sliderX" data-axis="X" min="-0.001" max="0.001" step="0.00005" oninput="showRangeValue('X:','sliderX','sliderInputX')"/>
-      </div>
-      <div class="sliderGroup clearfix">
-        <input type="text" id="sliderInputY" disabled/>
-        <input type="range" id="sliderY" data-axis="Y" min="-0.001" max="0.001" step="0.00005" oninput="showRangeValue('Y:','sliderY','sliderInputY')"/>
-      </div>
-      <div class="sliderGroup clearfix">
-        <input type="text" id="sliderInputZ" disabled/>
-        <input type="range" id="sliderZ" data-axis="Z" min="-0.001" max="0.001" step="0.00005" oninput="showRangeValue('Z:','sliderZ','sliderInputZ')"/>
-      </div>
-      
-      <h3>Zoom</h3>
-      <div class="sliderGroup clearfix">
-        <input type="text" id="sliderInputZoom" disabled/>
-        <input type="range" id="sliderZoom" min="-15" max="0" step="0.001" oninput="showRangeValue('Z:','sliderZoom','sliderInputZoom')"/>
-      </div>
+<head>
+  <meta charset="UTF-8">
+  <title>WebGL Sphere</title>
+  <link rel="stylesheet" href="css/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+</head>
+
+<body>
+  <div class="controls">
+    <h3>Rendering</h3>
+    <select id="drawMode">
+      <option disabled selected>Draw mode</option>
+      <option value="POINTS">Points</option>
+      <option value="LINES">Lines</option>
+      <option value="LINE_STRIP">Line Strip</option>
+      <option value="LINE_LOOP">Line Loop</option>
+      <option value="TRIANGLES">Triangles *</option>
+      <option value="TRIANGLE_STRIP">Triangle Strip</option>
+      <option value="TRIANGLE_FAN">Triangle Fan</option>
+    </select>
+
+    <select id="quality">
+      <option disabled selected>Quality</option>
+      <option value="0">Basic</option>
+      <option value="1">Simple</option>
+      <option value="2">Better</option>
+      <option value="3">Best *</option>
+    </select>
+
+    <span>* denotes default values</span>
+
+    <h3>Rotation</h3>
+    <div class="sliderGroup clearfix">
+      <input type="text" id="sliderInputX" disabled />
+      <input type="range" id="sliderX" data-axis="X" min="-0.001" max="0.001" step="0.00005" oninput="showRangeValue('X:','sliderX','sliderInputX')" />
     </div>
-    <canvas id="canvas"></canvas>
-    <script src="js/index.js"></script>
-  </body>
+    <div class="sliderGroup clearfix">
+      <input type="text" id="sliderInputY" disabled />
+      <input type="range" id="sliderY" data-axis="Y" min="-0.001" max="0.001" step="0.00005" oninput="showRangeValue('Y:','sliderY','sliderInputY')" />
+    </div>
+    <div class="sliderGroup clearfix">
+      <input type="text" id="sliderInputZ" disabled />
+      <input type="range" id="sliderZ" data-axis="Z" min="-0.001" max="0.001" step="0.00005" oninput="showRangeValue('Z:','sliderZ','sliderInputZ')" />
+    </div>
+
+    <h3>Zoom</h3>
+    <div class="sliderGroup clearfix">
+      <input type="text" id="sliderInputZoom" disabled />
+      <input type="range" id="sliderZoom" min="-15" max="0" step="0.001" oninput="showRangeValue('Z:','sliderZoom','sliderInputZoom')" />
+    </div>
+  </div>
+  <canvas id="canvas"></canvas>
+  <!-- data-main attribute tells require.js to load
+  scripts/main.js after require.js loads. -->
+  <script data-main="js/index.js" src="lib/require.js"></script>
+  <!-- <script type="module" src="js/index.js"></script> -->
+</body>
+
 </html>

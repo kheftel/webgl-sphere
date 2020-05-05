@@ -5,14 +5,17 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start":"tsc && gulp",
-    "build":"tsc",
+    "start": "tsc && gulp",
+    "build": "tsc",
     "watch-src": "tsc --watch"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "browser-sync": "^2.12.3",
-    "gulp": "^3.9.1"
-  }
+    "gulp": "^3.9.1",
+    "gulp-typescript": "^6.0.0-alpha.1",
+    "typescript": "^3.8.3"
+  },
+  "dependencies": {}
 }

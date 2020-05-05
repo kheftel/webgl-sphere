@@ -1,15 +1,14 @@
 {
     "compilerOptions": {
         "target": "es5",
-        "module": "none",
+        "module": "amd",
         "sourceMap": true,
         "noImplicitAny": true,
         "removeComments": false,
         "noLib": false,
         "preserveConstEnums": true,
-        "outFile": "js/index.js"
+        "outDir": "js"
     },
-    "files": [
-        "typescript/index.ts"
-    ]
-}
+    "include": [
+        "typescript/**/*"
+    ]}
