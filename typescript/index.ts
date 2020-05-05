@@ -3,20 +3,15 @@
 import Mesh from "./Mesh";
 import Sphere from "./Sphere";
 import Matrix from "./Matrix";
-
-interface IShaderProgram {
-	Pmatrix: WebGLUniformLocation;
-	Vmatrix: WebGLUniformLocation;
-	Mmatrix: WebGLUniformLocation;
-	NormalMatrix: WebGLUniformLocation;
-	ShaderProgram: WebGLProgram;
-}
+import IShaderProgram from "./IShaderProgram";
 
 class App {
 	private _canvas: HTMLCanvasElement;
 	private _gl: WebGLRenderingContext;
-	private _shader: IShaderProgram;
-	private _textures: WebGLTexture[];
+	private _defaultShader: IShaderProgram;
+	private _textures: {
+		[key: string]: WebGLTexture;
+	};
 
 	private _config:
 		{
@@ -63,49 +58,103 @@ class App {
 			}
 		};
 
-		this._textures = [];
+		this._textures = {};
 	}
 
 	private _setData() {
 		var gl = this._gl;
 
-		var radius = 7.0;
+		var backdrop = new Mesh('backdrop');
+		backdrop.isOpaque = true;
+		backdrop.is2D = true;
+		backdrop.shader = this._defaultShader;
+		backdrop.vertices = [
+			-1, 1, 0,
+			1, 1, 0,
+			-1, -1, 0,
+			1, -1, 0];
+		backdrop.normals = [
+			0, 0, 1,
+			0, 0, 1,
+			0, 0, 1,
+			0, 0, 1];
+		backdrop.uvs = [
+			0, 0,
+			0, 1,
+			1, 0,
+			1, 1];
+		backdrop.indices = [
+			0, 1, 2,
+			2, 1, 3];
+		backdrop.texture = this._textures['stars'];
+		backdrop.prepBuffers(gl);
+		Matrix.scale(backdrop.modelMatrix, backdrop.modelMatrix, [1, 1, 0]);
+		Matrix.translate(backdrop.modelMatrix, backdrop.modelMatrix, [1, 1, 0]);
+		backdrop.updateNormalMatrix();
 
+		var radius = 7.0;
 		var sphere = new Sphere(radius, this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
 		console.log(this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
 
-		var earth = new Mesh();
+		var earth = new Mesh('earth');
+		earth.isOpaque = true;
+		earth.shader = this._defaultShader;
 		earth.vertices = sphere.getVertices();
 		earth.normals = sphere.getNormals();
 		earth.uvs = sphere.getUVs();
 		earth.indices = sphere.getIndices();
 		earth.prepBuffers(gl);
-		earth.texture = this._textures[0];
-		Matrix.rotateX(earth.modelMatrix, 3 * Math.PI / 2);
-		Matrix.rotateY(earth.modelMatrix, Math.PI);
+		earth.texture = this._textures['earth'];
+		Matrix.rotateX(earth.modelMatrix, 270 * Math.PI / 180);
+		Matrix.rotateY(earth.modelMatrix, 170 * Math.PI / 180);
 		earth.updateNormalMatrix();
 
 		var sphere2 = new Sphere(radius * 1.02, this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
-		var clouds = new Mesh();
+		var clouds = new Mesh('clouds');
+		clouds.isOpaque = false;
+		clouds.shader = this._defaultShader;
 		clouds.vertices = sphere2.getVertices();
 		clouds.normals = sphere2.getNormals();
 		clouds.uvs = sphere2.getUVs();
 		clouds.indices = sphere2.getIndices();
 		clouds.prepBuffers(gl);
-		clouds.texture = this._textures[1];
-		Matrix.rotateX(clouds.modelMatrix, 3 * Math.PI / 2);
-		Matrix.rotateY(clouds.modelMatrix, Math.PI);
+		clouds.texture = this._textures['clouds'];
+		Matrix.rotateX(clouds.modelMatrix, 270 * Math.PI / 180);
+		Matrix.rotateY(clouds.modelMatrix, 170 * Math.PI / 180);
 		Matrix.translate(clouds.modelMatrix, clouds.modelMatrix, [0, 0, 0]);
 		clouds.updateNormalMatrix();
 
 		return {
-			meshes: [earth, clouds]
+			meshes: [backdrop, earth, clouds]
 		};
 	}
 
-	private _animate(proj_matrix: Float32Array, view_matrix: Float32Array, meshes: Mesh[]) {
+	/**
+	 * Resize a canvas to match the size its displayed.
+	 * @param {HTMLCanvasElement} canvas The canvas to resize.
+	 * @param {number} [multiplier] amount to multiply by.
+	 *    Pass in window.devicePixelRatio for native pixels.
+	 * @return {boolean} true if the canvas was resized.
+	 * @memberOf module:webgl-utils
+	 */
+	private _resizeCanvasToDisplaySize(multiplier: number = 0) {
+		var canvas = this._canvas;
+		multiplier = multiplier || 1;
+		const width = canvas.clientWidth * multiplier | 0;
+		const height = canvas.clientHeight * multiplier | 0;
+		if (canvas.width !== width || canvas.height !== height) {
+			canvas.width = width;
+			canvas.height = height;
+			return true;
+		}
+		return false;
+	}
+
+	private _animate(proj_matrix: Float32Array, view_matrix: Float32Array, ortho_matrix: Float32Array, meshes: Mesh[]) {
 		const gl = this._gl;
 		const rotThetas = this._config.Rotation;
+
+		var identity: Float32Array = Matrix.create();
 
 		let time_old = 0;
 		let zoomLevel_old = 0;
@@ -113,64 +162,49 @@ class App {
 			var dt = time - time_old;
 			time_old = time;
 
+			this._resizeCanvasToDisplaySize();
+
 			if (Math.abs(this._config.ZoomLevel - zoomLevel_old) >= 0.01) {
 				view_matrix[14] = view_matrix[14] + (zoomLevel_old * -1) + this._config.ZoomLevel;
 				zoomLevel_old = this._config.ZoomLevel;
 				console.log(this._config.ZoomLevel);
 			}
 
-			gl.enable(gl.DEPTH_TEST);
-			gl.depthFunc(gl.LEQUAL);
 			gl.clearDepth(1.0);
-			gl.viewport(0.0, 0.0, this._canvas.width, this._canvas.height);
+			gl.viewport(0.0, 0.0, this._canvas.clientWidth, this._canvas.clientHeight);
 			gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-			gl.uniformMatrix4fv(this._shader.Pmatrix, false, proj_matrix);
-			gl.uniformMatrix4fv(this._shader.Vmatrix, false, view_matrix);
 
 			for (var i = 0; i < meshes.length; i++) {
 				var mesh = meshes[i];
 
-				for (var axis in rotThetas) {
-					var theta = rotThetas[axis];
-					if (theta > 0.0 || theta < 0.0) {
-						(<any>Matrix)[`rotate${axis}`](mesh.modelMatrix, dt * theta);
+				// update mesh
+				if (mesh.name != 'backdrop') {
+					for (var axis in rotThetas) {
+						var theta = rotThetas[axis];
+						if (theta > 0.0 || theta < 0.0) {
+							(<any>Matrix)[`rotate${axis}`](mesh.modelMatrix, dt * theta);
+						}
 					}
 				}
 
-				mesh.updateNormalMatrix();
-				gl.uniformMatrix4fv(this._shader.Mmatrix, false, mesh.modelMatrix);
-				gl.uniformMatrix4fv(this._shader.NormalMatrix, false, mesh.normalMatrix);
+				// rendering
+				var shader = mesh.shader;
+				gl.useProgram(shader.shaderProgram);
 
-				var shaderProgram = this._shader.ShaderProgram;
-				var position = gl.getAttribLocation(shaderProgram, "position");
-				gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vertexBuffer);
-				gl.vertexAttribPointer(position, 3, gl.FLOAT, false, 0, 0);
-				gl.enableVertexAttribArray(position);
+				if (!mesh.is2D) {
+					gl.enable(gl.DEPTH_TEST);
+					gl.depthFunc(gl.LEQUAL);
+					gl.uniformMatrix4fv(shader.uloc_Projection, false, proj_matrix);
+					gl.uniformMatrix4fv(shader.uloc_View, false, view_matrix);
+				}
+				else {
+					gl.disable(gl.DEPTH_TEST);
+					gl.uniformMatrix4fv(shader.uloc_Projection, false, ortho_matrix);
+					gl.uniformMatrix4fv(shader.uloc_View, false, identity);
+				}
 
-				gl.bindBuffer(gl.ARRAY_BUFFER, mesh.normalBuffer);
-				var normal = gl.getAttribLocation(shaderProgram, "normal");
-				gl.vertexAttribPointer(normal, 3, gl.FLOAT, false, 0, 0);
-				gl.enableVertexAttribArray(normal);
-
-				gl.bindBuffer(gl.ARRAY_BUFFER, mesh.uvBuffer);
-				var uv = gl.getAttribLocation(shaderProgram, "uv");
-				gl.vertexAttribPointer(uv, 2, gl.FLOAT, false, 0, 0);
-				gl.enableVertexAttribArray(uv);
-
-				// set mesh's texture to sampler 0
-				gl.activeTexture(gl.TEXTURE0);
-				gl.bindTexture(gl.TEXTURE_2D, mesh.texture);
-				gl.uniform1i(gl.getUniformLocation(this._shader.ShaderProgram, 'uSampler'), 0);
-
-				// use mesh's index buffer
-				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
-
-				gl.enable(gl.BLEND);
-				gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-
-				// draw mesh
-				gl.drawElements(this._config.DrawMode, mesh.indices.length, gl.UNSIGNED_SHORT, 0);
+				mesh.beforeDraw(gl);
+				mesh.draw(gl);
 			}
 
 			window.requestAnimationFrame(execAnimation);
@@ -180,20 +214,15 @@ class App {
 	}
 
 	public Draw() {
+		this._defaultShader = App.UseQuarternionShaderProgram(this._gl);
+
 		var data = this._setData();
 
-		this._shader = App.UseQuarternionShaderProgram(this._gl);
-
-		var proj_matrix = Matrix.GetProjection(45, this._canvas.width / this._canvas.height, 1, 100);
+		var proj_matrix = Matrix.perspectiveProjection(45, this._canvas.width / this._canvas.height, 1, 100);
 		var view_matrix = Matrix.create();
-		// var mov_matrix = Matrix.Create();
-		// Matrix.RotateX(mov_matrix, 3 * Math.PI / 2);
-		// Matrix.RotateY(mov_matrix, Math.PI);
-		// var normal_matrix = Matrix.Create();
-		// Matrix.Invert(normal_matrix, mov_matrix);
-		// Matrix.Transpose(normal_matrix, normal_matrix);
+		var ortho_matrix = Matrix.orthoProjection(2, 2, 1000);
 
-		this._animate(proj_matrix, view_matrix, data.meshes);
+		this._animate(proj_matrix, view_matrix, ortho_matrix, data.meshes);
 	}
 
 	public SetDrawMode(value: string) {
@@ -209,8 +238,8 @@ class App {
 
 		this._config.Quality = intValue;
 
-		var buffers = this._setData();
-		this._shader = App.UseQuarternionShaderProgram(this._gl);
+		this._setData();
+		this._defaultShader = App.UseQuarternionShaderProgram(this._gl);
 	}
 
 	public GetRotation(axis: string) {
@@ -238,7 +267,7 @@ class App {
 	// Initialize a texture and load an image.
 	// When the image finished loading copy it into the texture.
 	//
-	public loadTexture(url: string, index: number) {
+	public loadTexture(url: string, key: string) {
 		var gl = this._gl;
 		const texture = gl.createTexture();
 		gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -282,7 +311,7 @@ class App {
 		};
 		image.src = url;
 
-		this._textures[index] = texture;
+		this._textures[key] = texture;
 	}
 
 	public static isPowerOf2(value: number) {
@@ -291,47 +320,37 @@ class App {
 
 	public static UseQuarternionVertShader(gl: WebGLRenderingContext) {
 		var vertCode = `
-			attribute vec3 position;
-			attribute vec3 normal;
-			attribute vec2 uv;
+			attribute vec3 a_position;
+			attribute vec3 a_normal;
+			attribute vec2 a_uv;
 
-			attribute highp vec3 aVertexNormal;
-			
-			uniform mat4 Pmatrix;
-			uniform mat4 Vmatrix;
-			uniform mat4 Mmatrix;
-			uniform mat4 NormalMatrix;
+			uniform mat4 u_Projection;
+			uniform mat4 u_View;
+			uniform mat4 u_Model;
+			uniform mat4 u_NormalMatrix;
 
-			varying vec3 vLightWeighting;
-			
-			uniform vec3 uAmbientColor;
-			uniform vec3 uPointLightingLocation;
-			uniform vec3 uPointLightingColor;
+			uniform vec3 u_ambientLight;
+			uniform vec3 u_directionalLight;
+			uniform vec3 u_directionalLightColor;
 
-			varying highp vec2 vTextureCoord;
-			varying highp vec3 vLighting;
+			varying highp vec2 v_TextureCoord;
+			varying highp vec3 v_Lighting;
 
 			void main(void) {
 				// Output tex coord to frag shader.
-				vTextureCoord = uv;
+				v_TextureCoord = a_uv;
 				
 				// set position of vertex
-				gl_Position = Pmatrix * Vmatrix * Mmatrix * vec4(position, 1.);
+				gl_Position = u_Projection * u_View * u_Model * vec4(a_position, 1.);
 				gl_PointSize = 4.0;
 
 				// Apply lighting effect
-				highp vec3 ambientLight = vec3(0.3, 0.3, 0.3);
-				highp vec3 directionalLightColor = vec3(1, 1, 1);
-				highp vec3 directionalVector = normalize(vec3(0.85, 0.8, 0.75));
-				// highp vec3 directionalVector = normalize(vec3(0, 0, -1));
-				highp vec4 transformedNormal = NormalMatrix * vec4(normal, 1.0);
-				highp float directional = max(dot(transformedNormal.xyz, directionalVector), 0.0);
-				vLighting = ambientLight + (directionalLightColor * directional);				
-
-				// vec3 lightDirection = normalize(uPointLightingLocation - mvPosition.xyz);
-				// vec3 transformedNormal = vec3(Vmatrix) * aVertexNormal;
-				// float directionalLightWeighting = max(dot(transformedNormal, lightDirection), 0.0);
-				// vLightWeighting = uAmbientColor + uPointLightingColor * directionalLightWeighting;
+				// highp vec3 u_ambientLight = vec3(0.3, 0.3, 0.3);
+				// highp vec3 u_directionalLightColor = vec3(1, 1, 1);
+				// highp vec3 u_directionalLight = normalize(vec3(0.85, 0.8, 0.75));
+				highp vec4 transformedNormal = u_NormalMatrix * vec4(a_normal, 1.0);
+				highp float directional = max(dot(transformedNormal.xyz, u_directionalLight), 0.0);
+				v_Lighting = u_ambientLight + (u_directionalLightColor * directional);				
 			}`;
 
 		var vertShader = gl.createShader(gl.VERTEX_SHADER);
@@ -351,14 +370,14 @@ class App {
 
 	public static UseVariableFragShader(gl: WebGLRenderingContext) {
 		var fragCode = `
-			varying highp vec2 vTextureCoord;
-			varying highp vec3 vLighting;
+			varying highp vec2 v_TextureCoord;
+			varying highp vec3 v_Lighting;
 
-			uniform sampler2D uSampler;
+			uniform sampler2D u_Sampler;
 
 			void main(void) {
-				highp vec4 texelColor = texture2D(uSampler, vTextureCoord); //vec4(vColor.rgb, 1.);
-				gl_FragColor = vec4(texelColor.rgb * vLighting * texelColor.a, texelColor.a);
+				highp vec4 texelColor = texture2D(u_Sampler, v_TextureCoord); //vec4(vColor.rgb, 1.);
+				gl_FragColor = vec4(texelColor.rgb * v_Lighting * texelColor.a, texelColor.a);
 			}`;
 
 		var fragShader = gl.createShader(gl.FRAGMENT_SHADER);
@@ -389,41 +408,26 @@ class App {
 			alert('Unable to initialize the shader program: ' + gl.getProgramInfoLog(shaderProgram));
 		}
 
-		var Pmatrix = gl.getUniformLocation(shaderProgram, "Pmatrix");
-		var Vmatrix = gl.getUniformLocation(shaderProgram, "Vmatrix");
-		var Mmatrix = gl.getUniformLocation(shaderProgram, "Mmatrix");
-		var NormalMatrix = gl.getUniformLocation(shaderProgram, "NormalMatrix");
-
-		// ctx.bindBuffer(ctx.ARRAY_BUFFER, vertex_buffer);
-		// var position = ctx.getAttribLocation(shaderProgram, "position");
-		// ctx.vertexAttribPointer(position, 3, ctx.FLOAT, false, 0, 0);
-		// ctx.enableVertexAttribArray(position);
-
-		// ctx.bindBuffer(ctx.ARRAY_BUFFER, normal_buffer);
-		// var normal = ctx.getAttribLocation(shaderProgram, "normal");
-		// ctx.vertexAttribPointer(normal, 3, ctx.FLOAT, false, 0, 0);
-		// ctx.enableVertexAttribArray(normal);
-
-		// ctx.bindBuffer(ctx.ARRAY_BUFFER, uv_buffer);
-		// var uv = ctx.getAttribLocation(shaderProgram, "uv");
-		// ctx.vertexAttribPointer(uv, 2, ctx.FLOAT, false, 0, 0);
-		// ctx.enableVertexAttribArray(uv);
+		var uloc_Projection = gl.getUniformLocation(shaderProgram, "u_Projection");
+		var uloc_View = gl.getUniformLocation(shaderProgram, "u_View");
+		var uloc_Model = gl.getUniformLocation(shaderProgram, "u_Model");
+		var uloc_Noraml = gl.getUniformLocation(shaderProgram, "u_NormalMatrix");
 
 		gl.useProgram(shaderProgram);
 
-		var ambientColor = gl.getUniformLocation(shaderProgram, "uAmbientColor");
-		var pointLightingLocation = gl.getUniformLocation(shaderProgram, "uPointLightingLocation");
-		var pointLightingColor = gl.getUniformLocation(shaderProgram, "uPointLightingColor");
-		gl.uniform3f(ambientColor, 0.2, 0.2, 0.2);
-		gl.uniform3f(pointLightingLocation, 0.0, 0.0, -20.0);
-		gl.uniform3f(pointLightingColor, 0.8, 0.8, 0.8);
+		var uloc_ambientLight = gl.getUniformLocation(shaderProgram, "u_ambientLight");
+		var uloc_directionalLight = gl.getUniformLocation(shaderProgram, "u_directionalLight");
+		var uloc_directionalLightColor = gl.getUniformLocation(shaderProgram, "u_directionalLightColor");
+		gl.uniform3f(uloc_ambientLight, 0.3, 0.3, 0.3);
+		gl.uniform3f(uloc_directionalLight, 1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3));
+		gl.uniform3f(uloc_directionalLightColor, 1, 1, 1);
 
 		return {
-			Pmatrix: Pmatrix,
-			Vmatrix: Vmatrix,
-			Mmatrix: Mmatrix,
-			NormalMatrix: NormalMatrix,
-			ShaderProgram: shaderProgram
+			uloc_Projection: uloc_Projection,
+			uloc_View: uloc_View,
+			uloc_Model: uloc_Model,
+			uloc_Normal: uloc_Noraml,
+			shaderProgram: shaderProgram
 		};
 	}
 }
@@ -435,8 +439,9 @@ function showRangeValue(prepend: string, sliderId: string, inputId: string) {
 function startApp() {
 	let app = new App(<HTMLCanvasElement>document.getElementById('canvas'));
 
-	app.loadTexture('./img/earth.png', 0);
-	app.loadTexture('./img/clouds.png', 1);
+	app.loadTexture('./img/stars.png', 'stars');
+	app.loadTexture('./img/earth.png', 'earth');
+	app.loadTexture('./img/clouds.png', 'clouds');
 
 	let drawMode = <HTMLSelectElement>document.getElementById('drawMode');
 	drawMode.addEventListener('change', (e) => app.SetDrawMode((<HTMLOptionElement>drawMode.options[drawMode.selectedIndex]).value));
@@ -454,10 +459,22 @@ function startApp() {
 	sliderZ.value = app.GetRotation('Z').toString();
 	sliderZoom.value = app.GetZoom().toString();
 
-	sliderX.addEventListener('input', () => app.SetRotation(sliderX.getAttribute('data-axis'), parseFloat(sliderX.value)));
-	sliderY.addEventListener('input', () => app.SetRotation(sliderY.getAttribute('data-axis'), parseFloat(sliderY.value)));
-	sliderZ.addEventListener('input', () => app.SetRotation(sliderZ.getAttribute('data-axis'), parseFloat(sliderZ.value)));
-	sliderZoom.addEventListener('input', () => app.SetZoom(parseFloat(sliderZoom.value)));
+	sliderX.addEventListener('input', () => {
+		app.SetRotation(sliderX.getAttribute('data-axis'), parseFloat(sliderX.value));
+		showRangeValue('X:', 'sliderX', 'sliderInputX');
+	});
+	sliderY.addEventListener('input', () => {
+		app.SetRotation(sliderY.getAttribute('data-axis'), parseFloat(sliderY.value))
+		showRangeValue('Y:', 'sliderY', 'sliderInputY');
+	});
+	sliderZ.addEventListener('input', () => {
+		app.SetRotation(sliderZ.getAttribute('data-axis'), parseFloat(sliderZ.value))
+		showRangeValue('Z:', 'sliderZ', 'sliderInputZ');
+	});
+	sliderZoom.addEventListener('input', () => {
+		app.SetZoom(parseFloat(sliderZoom.value));
+		showRangeValue('', 'sliderZoom', 'sliderInputZoom');
+	});
 
 	showRangeValue('X:', 'sliderX', 'sliderInputX');
 	showRangeValue('Y:', 'sliderY', 'sliderInputY');

@@ -3,13 +3,22 @@ export default class Matrix {
 		return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 	}
 
-	public static GetProjection(angle: number, a: number, zMin: number, zMax: number) {
+	public static perspectiveProjection(angle: number, a: number, zMin: number, zMax: number) {
 		var ang = Math.tan((angle * .5) * Math.PI / 180);
 		return new Float32Array([
 			0.5 / ang, 0, 0, 0,
 			0, 0.5 * a / ang, 0, 0,
 			0, 0, -(zMax + zMin) / (zMax - zMin), -1,
 			0, 0, (-2 * zMax * zMin) / (zMax - zMin), 0
+		]);
+	}
+
+	public static orthoProjection(width: number, height: number, depth: number) {
+		return new Float32Array([
+			2 / width, 0, 0, 0,
+			0, -2 / height, 0, 0,
+			0, 0, 2 / depth, 0,
+			-1, 1, 0, 1,
 		]);
 	}
 
@@ -322,6 +331,30 @@ export default class Matrix {
 		out[13] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
 		out[14] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
 		out[15] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+		return out;
+	}
+
+	public static scale(out: Float32Array, a: Float32Array, v: number[]) {
+		var x = v[0],
+			y = v[1],
+			z = v[2];
+
+		out[0] = a[0] * x;
+		out[1] = a[1] * x;
+		out[2] = a[2] * x;
+		out[3] = a[3] * x;
+		out[4] = a[4] * y;
+		out[5] = a[5] * y;
+		out[6] = a[6] * y;
+		out[7] = a[7] * y;
+		out[8] = a[8] * z;
+		out[9] = a[9] * z;
+		out[10] = a[10] * z;
+		out[11] = a[11] * z;
+		out[12] = a[12];
+		out[13] = a[13];
+		out[14] = a[14];
+		out[15] = a[15];
 		return out;
 	}
 

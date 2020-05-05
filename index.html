@@ -35,24 +35,25 @@
     <h3>Rotation</h3>
     <div class="sliderGroup clearfix">
       <input type="text" id="sliderInputX" disabled />
-      <input type="range" id="sliderX" data-axis="X" min="-0.001" max="0.001" step="0.00005" oninput="showRangeValue('X:','sliderX','sliderInputX')" />
+      <input type="range" id="sliderX" data-axis="X" min="-0.001" max="0.001" step="0.00005" />
     </div>
     <div class="sliderGroup clearfix">
       <input type="text" id="sliderInputY" disabled />
-      <input type="range" id="sliderY" data-axis="Y" min="-0.001" max="0.001" step="0.00005" oninput="showRangeValue('Y:','sliderY','sliderInputY')" />
+      <input type="range" id="sliderY" data-axis="Y" min="-0.001" max="0.001" step="0.00005" />
     </div>
     <div class="sliderGroup clearfix">
       <input type="text" id="sliderInputZ" disabled />
-      <input type="range" id="sliderZ" data-axis="Z" min="-0.001" max="0.001" step="0.00005" oninput="showRangeValue('Z:','sliderZ','sliderInputZ')" />
+      <input type="range" id="sliderZ" data-axis="Z" min="-0.001" max="0.001" step="0.00005" />
     </div>
 
     <h3>Zoom</h3>
     <div class="sliderGroup clearfix">
       <input type="text" id="sliderInputZoom" disabled />
-      <input type="range" id="sliderZoom" min="-15" max="0" step="0.001" oninput="showRangeValue('Z:','sliderZoom','sliderInputZoom')" />
+      <input type="range" id="sliderZoom" min="-15" max="0" step="0.001" />
     </div>
   </div>
   <canvas id="canvas"></canvas>
+  <script src="lib/webgl-utils.js"></script>
   <!-- data-main attribute tells require.js to load
   scripts/main.js after require.js loads. -->
   <script data-main="js/index.js" src="lib/require.js"></script>
