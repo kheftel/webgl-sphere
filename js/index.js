@@ -1,10 +1,16 @@
-var App = (function () {
+var App = /** @class */ (function () {
     function App(canvas) {
         this._definedColors = [
             //[.1, .1, .1, 1],    // white
             [.1, .0, .0, 1],
             [.0, .1, .0, 1],
             [.0, .0, .1, 1],
+        ];
+        this._qualityData = [
+            { sectors: 10, stacks: 5 },
+            { sectors: 18, stacks: 9 },
+            { sectors: 36, stacks: 18 },
+            { sectors: 72, stacks: 36 },
         ];
         this._canvas = canvas;
         this._ctx = canvas.getContext('webgl');
@@ -15,19 +21,25 @@ var App = (function () {
             {
                 DrawMode: this._ctx.TRIANGLES,
                 Quality: 3,
-                ZoomLevel: -2.8,
+                ZoomLevel: -15,
                 Rotation: {
-                    X: 0.0001,
-                    Y: 0.00005,
+                    X: 0.0000,
+                    Y: 0.0001,
                     Z: 0
                 }
             };
     }
     App.prototype._setData = function () {
         var ctx = this._ctx;
-        var icosahedron = new Icosahedron3D(this._config.Quality);
-        this._vertices = icosahedron.Points.reduce(function (a, b, i) { return i === 1 ? [a.x, a.y, a.z, b.x, b.y, b.z] : a.concat([b.x, b.y, b.z]); });
-        this._indices = icosahedron.TriangleIndices;
+        // var icosahedron = new Icosahedron3D(this._config.Quality);
+        // this._vertices = <number[]><any>icosahedron.Points.reduce((a, b, i) => i === 1 ? [a.x, a.y, a.z, b.x, b.y, b.z] : (<any>a).concat([b.x, b.y, b.z]));
+        // this._uvs = <number[]><any>icosahedron.Points.reduce((a, b, i) => i === 1 ? [a.u, a.v, b.u, b.v] : (<any>a).concat([b.u, b.v]));
+        // this._indices = icosahedron.TriangleIndices;
+        var sphere = new Sphere(7, this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
+        console.log(this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
+        this._vertices = sphere.Points.reduce(function (a, b, i) { return i === 1 ? [a.x, a.y, a.z, b.x, b.y, b.z] : a.concat([b.x, b.y, b.z]); });
+        this._uvs = sphere.TextureCoords.reduce(function (a, b, i) { return i === 1 ? [a.u, a.v, b.u, b.v] : a.concat([b.u, b.v]); });
+        this._indices = sphere.TriangleIndices;
         this._colors = this._generateColors(this._vertices);
         var vertex_buffer = ctx.createBuffer();
         ctx.bindBuffer(ctx.ARRAY_BUFFER, vertex_buffer);
@@ -35,11 +47,15 @@ var App = (function () {
         var color_buffer = ctx.createBuffer();
         ctx.bindBuffer(ctx.ARRAY_BUFFER, color_buffer);
         ctx.bufferData(ctx.ARRAY_BUFFER, new Float32Array(this._colors), ctx.STATIC_DRAW);
+        var uv_buffer = ctx.createBuffer();
+        ctx.bindBuffer(ctx.ARRAY_BUFFER, uv_buffer);
+        ctx.bufferData(ctx.ARRAY_BUFFER, new Float32Array(this._uvs), ctx.STATIC_DRAW);
         var index_buffer = ctx.createBuffer();
         ctx.bindBuffer(ctx.ELEMENT_ARRAY_BUFFER, index_buffer);
         ctx.bufferData(ctx.ELEMENT_ARRAY_BUFFER, new Uint16Array(this._indices), ctx.STATIC_DRAW);
         return {
             vertex: vertex_buffer,
+            uv: uv_buffer,
             color: color_buffer,
             index: index_buffer
         };
@@ -63,7 +79,7 @@ var App = (function () {
             for (var axis in rotThetas) {
                 var theta = rotThetas[axis];
                 if (theta > 0.0 || theta < 0.0) {
-                    Matrix[("Rotate" + axis)](mov_matrix, dt * theta);
+                    Matrix["Rotate" + axis](mov_matrix, dt * theta);
                 }
             }
             if (Math.abs(_this._config.ZoomLevel - zoomLevel_old) >= 0.01) {
@@ -79,6 +95,12 @@ var App = (function () {
             ctx.uniformMatrix4fv(_this._shader.Pmatrix, false, proj_matrix);
             ctx.uniformMatrix4fv(_this._shader.Vmatrix, false, view_matrix);
             ctx.uniformMatrix4fv(_this._shader.Mmatrix, false, mov_matrix);
+            // Tell WebGL we want to affect texture unit 0
+            ctx.activeTexture(ctx.TEXTURE0);
+            // Bind the texture to texture unit 0
+            ctx.bindTexture(ctx.TEXTURE_2D, _this._texture);
+            // Tell the shader we bound the texture to texture unit 0
+            ctx.uniform1i(ctx.getUniformLocation(_this._shader.ShaderProgram, 'uSampler'), 0);
             ctx.drawElements(_this._config.DrawMode, _this._indices.length, ctx.UNSIGNED_SHORT, 0);
             window.requestAnimationFrame(execAnimation);
         };
@@ -86,10 +108,11 @@ var App = (function () {
     };
     App.prototype.Draw = function () {
         var buffers = this._setData();
-        this._shader = App.UseQuarternionShaderProgram(this._ctx, buffers.vertex, buffers.color);
+        this._shader = App.UseQuarternionShaderProgram(this._ctx, buffers.vertex, buffers.color, buffers.uv, this._texture);
         var proj_matrix = new Float32Array(Matrix.GetProjection(40, this._canvas.width / this._canvas.height, 1, 100));
         var view_matrix = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
         var mov_matrix = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+        Matrix.RotateX(mov_matrix, 3 * Math.PI / 2);
         this._animate(proj_matrix, view_matrix, mov_matrix);
     };
     App.prototype.SetDrawMode = function (value) {
@@ -104,7 +127,7 @@ var App = (function () {
             throw new Error("Quality value must be a number.");
         this._config.Quality = intValue;
         var buffers = this._setData();
-        this._shader = App.UseQuarternionShaderProgram(this._ctx, buffers.vertex, buffers.color);
+        this._shader = App.UseQuarternionShaderProgram(this._ctx, buffers.vertex, buffers.color, buffers.uv, this._texture);
     };
     App.prototype.GetRotation = function (axis) {
         return this._config.Rotation[axis];
@@ -124,27 +147,90 @@ var App = (function () {
             throw new Error("Zoom value must be a number.");
         this._config.ZoomLevel = value;
     };
+    //
+    // Initialize a texture and load an image.
+    // When the image finished loading copy it into the texture.
+    //
+    App.prototype.loadTexture = function (url) {
+        var gl = this._ctx;
+        var texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        // Because images have to be download over the internet
+        // they might take a moment until they are ready.
+        // Until then put a single pixel in the texture so we can
+        // use it immediately. When the image has finished downloading
+        // we'll update the texture with the contents of the image.
+        var level = 0;
+        var internalFormat = gl.RGBA;
+        var width = 1;
+        var height = 1;
+        var border = 0;
+        var srcFormat = gl.RGBA;
+        var srcType = gl.UNSIGNED_BYTE;
+        var pixel = new Uint8Array([0, 0, 0, 0]); // transparent black
+        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, srcFormat, srcType, pixel);
+        var image = new Image();
+        image.onload = function () {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, image);
+            // WebGL1 has different requirements for power of 2 images
+            // vs non power of 2 images so check if the image is a
+            // power of 2 in both dimensions.
+            if (App.isPowerOf2(image.width) && App.isPowerOf2(image.height)) {
+                // Yes, it's a power of 2. Generate mips.
+                gl.generateMipmap(gl.TEXTURE_2D);
+            }
+            else {
+                // No, it's not a power of 2. Turn off mips and set
+                // wrapping to clamp to edge
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            }
+        };
+        image.src = url;
+        this._texture = texture;
+        return texture;
+    };
+    App.isPowerOf2 = function (value) {
+        return (value & (value - 1)) == 0;
+    };
     App.UseQuarternionVertShader = function (context) {
-        var vertCode = "\n\t\t\tattribute vec3 position;\n\t\t\tattribute highp vec3 aVertexNormal;\n\t\t\t\n\t\t\tuniform mat4 Pmatrix;\n\t\t\tuniform mat4 Vmatrix;\n\t\t\tuniform mat4 Mmatrix;\n\n\t\t\tattribute vec4 color;\n\t\t\tvarying lowp vec4 vColor;\n\n\t\t\tvarying vec3 vLightWeighting;\n\t\t\t\n\t\t\tuniform vec3 uAmbientColor;\n\t\t\tuniform vec3 uPointLightingLocation;\n\t\t\tuniform vec3 uPointLightingColor;\n\n\t\t\tvoid main(void) {\n\t\t\t\tvec4 mvPosition = Mmatrix * vec4(position, 1.);\n\t\t\t\tgl_Position = Pmatrix*Vmatrix*mvPosition;\n\t\t\t\tgl_PointSize = 4.0;\n\t\t\t\tvColor = color;\n\n\t\t\t\tvec3 lightDirection = normalize(uPointLightingLocation - mvPosition.xyz);\n\t\t\t\tvec3 transformedNormal = vec3(Vmatrix) * aVertexNormal;\n\t\t\t\tfloat directionalLightWeighting = max(dot(transformedNormal, lightDirection), 0.0);\n\t\t\t\tvLightWeighting = uAmbientColor + uPointLightingColor * directionalLightWeighting;\n\t\t\t}";
+        var vertCode = "\n\t\t\tattribute vec3 position;\n\t\t\tattribute vec2 uv;\n\n\t\t\tattribute highp vec3 aVertexNormal;\n\t\t\t\n\t\t\tuniform mat4 Pmatrix;\n\t\t\tuniform mat4 Vmatrix;\n\t\t\tuniform mat4 Mmatrix;\n\n\t\t\tattribute vec4 color;\n\t\t\tvarying lowp vec4 vColor;\n\n\t\t\tvarying vec3 vLightWeighting;\n\t\t\t\n\t\t\tuniform vec3 uAmbientColor;\n\t\t\tuniform vec3 uPointLightingLocation;\n\t\t\tuniform vec3 uPointLightingColor;\n\n\t\t\tvarying highp vec2 vTextureCoord;\n\n\t\t\tvoid main(void) {\n\t\t\t\t// Output tex coord to frag shader.\n\t\t\t\tvTextureCoord = uv;\n\t\t\t\t\n\t\t\t\tvec4 mvPosition = Mmatrix * vec4(position, 1.);\n\t\t\t\tgl_Position = Pmatrix*Vmatrix*mvPosition;\n\t\t\t\tgl_PointSize = 4.0;\n\t\t\t\tvColor = color;\n\n\t\t\t\tvec3 lightDirection = normalize(uPointLightingLocation - mvPosition.xyz);\n\t\t\t\tvec3 transformedNormal = vec3(Vmatrix) * aVertexNormal;\n\t\t\t\tfloat directionalLightWeighting = max(dot(transformedNormal, lightDirection), 0.0);\n\t\t\t\tvLightWeighting = uAmbientColor + uPointLightingColor * directionalLightWeighting;\n\t\t\t}";
         var vertShader = context.createShader(context.VERTEX_SHADER);
         context.shaderSource(vertShader, vertCode);
         context.compileShader(vertShader);
+        // See if it compiled successfully
+        if (!context.getShaderParameter(vertShader, context.COMPILE_STATUS)) {
+            console.error('An error occurred compiling vertex shader: ' + context.getShaderInfoLog(vertShader));
+            context.deleteShader(vertShader);
+            return null;
+        }
         return vertShader;
     };
     App.UseVariableFragShader = function (context) {
-        var fragCode = "\n\t\t\tprecision mediump float;\n\t\t\tvarying lowp vec4 vColor;\n\t\t\tvarying vec3 vLightWeighting;\n\t\t\tvoid main(void) {\n\t\t\t\tgl_FragColor = vec4(vColor.rgb, 1.);\n\t\t\t}";
+        var fragCode = "\n\t\t\tprecision mediump float;\n\t\t\tvarying lowp vec4 vColor;\n\t\t\tvarying vec3 vLightWeighting;\n\t\t\tuniform sampler2D uSampler;\n\t\t\tvarying highp vec2 vTextureCoord;\n\n\t\t\tvoid main(void) {\n\t\t\t\tgl_FragColor = texture2D(uSampler, vTextureCoord);//vec4(vColor.rgb, 1.);\n\t\t\t}";
         var fragShader = context.createShader(context.FRAGMENT_SHADER);
         context.shaderSource(fragShader, fragCode);
         context.compileShader(fragShader);
+        if (!context.getShaderParameter(fragShader, context.COMPILE_STATUS)) {
+            console.error('An error occurred compiling fragment shader: ' + context.getShaderInfoLog(fragShader));
+            context.deleteShader(fragShader);
+            return null;
+        }
         return fragShader;
     };
-    App.UseQuarternionShaderProgram = function (ctx, vertex_buffer, color_buffer) {
+    App.UseQuarternionShaderProgram = function (ctx, vertex_buffer, color_buffer, uv_buffer, texture) {
         var vertShader = App.UseQuarternionVertShader(ctx);
         var fragShader = App.UseVariableFragShader(ctx);
         var shaderProgram = ctx.createProgram();
         ctx.attachShader(shaderProgram, vertShader);
         ctx.attachShader(shaderProgram, fragShader);
         ctx.linkProgram(shaderProgram);
+        // If creating the shader program failed, alert
+        if (!ctx.getProgramParameter(shaderProgram, ctx.LINK_STATUS)) {
+            alert('Unable to initialize the shader program: ' + ctx.getProgramInfoLog(shaderProgram));
+        }
         var Pmatrix = ctx.getUniformLocation(shaderProgram, "Pmatrix");
         var Vmatrix = ctx.getUniformLocation(shaderProgram, "Vmatrix");
         var Mmatrix = ctx.getUniformLocation(shaderProgram, "Mmatrix");
@@ -152,6 +238,10 @@ var App = (function () {
         var position = ctx.getAttribLocation(shaderProgram, "position");
         ctx.vertexAttribPointer(position, 3, ctx.FLOAT, false, 0, 0);
         ctx.enableVertexAttribArray(position);
+        ctx.bindBuffer(ctx.ARRAY_BUFFER, uv_buffer);
+        var uv = ctx.getAttribLocation(shaderProgram, "uv");
+        ctx.vertexAttribPointer(uv, 2, ctx.FLOAT, false, 0, 0);
+        ctx.enableVertexAttribArray(uv);
         ctx.bindBuffer(ctx.ARRAY_BUFFER, color_buffer);
         var color = ctx.getAttribLocation(shaderProgram, "color");
         ctx.vertexAttribPointer(color, 3, ctx.FLOAT, false, 0, 0);
@@ -171,8 +261,8 @@ var App = (function () {
         };
     };
     return App;
-})();
-var Matrix = (function () {
+}());
+var Matrix = /** @class */ (function () {
     function Matrix() {
     }
     Matrix.GetProjection = function (angle, a, zMin, zMax) {
@@ -247,8 +337,115 @@ var Matrix = (function () {
     };
     ;
     return Matrix;
-})();
-var Icosahedron3D = (function () {
+}());
+var Sphere = /** @class */ (function () {
+    function Sphere(radius, sectors, stacks) {
+        if (radius === void 0) { radius = 1; }
+        if (sectors === void 0) { sectors = 36; }
+        if (stacks === void 0) { stacks = 18; }
+        this._radius = radius;
+        this._sectorCount = sectors;
+        this._stackCount = stacks;
+        this._calculateGeometry();
+    }
+    Sphere.prototype._calculateGeometry = function () {
+        this.Points = [];
+        this.TriangleIndices = [];
+        this.TextureCoords = [];
+        this._middlePointIndexCache = {};
+        ///////////////////////////////////////////////////////////////////////////////
+        // build vertices of sphere with smooth shading using parametric equation
+        // x = r * cos(u) * cos(v)
+        // y = r * cos(u) * sin(v)
+        // z = r * sin(u)
+        // where u: stack(latitude) angle (-90 <= u <= 90)
+        //       v: sector(longitude) angle (0 <= v <= 360)
+        ///////////////////////////////////////////////////////////////////////////////
+        var radius = this._radius;
+        var sectorCount = this._sectorCount;
+        var stackCount = this._stackCount;
+        var x, y, z, xy; // vertex position
+        var nx, ny, nz, lengthInv = 1.0 / radius; // normal
+        var s, t; // texCoord
+        var sectorStep = 2 * Math.PI / sectorCount;
+        var stackStep = Math.PI / stackCount;
+        var sectorAngle, stackAngle;
+        for (var i = 0; i <= stackCount; ++i) {
+            stackAngle = Math.PI / 2 - i * stackStep; // starting from pi/2 to -pi/2
+            xy = radius * Math.cos(stackAngle); // r * cos(u)
+            z = radius * Math.sin(stackAngle); // r * sin(u)
+            // add (sectorCount+1) vertices per stack
+            // the first and last vertices have same position and normal, but different tex coords
+            for (var j = 0; j <= sectorCount; ++j) {
+                sectorAngle = j * sectorStep; // starting from 0 to 2pi
+                // vertex position
+                x = xy * Math.cos(sectorAngle); // r * cos(u) * cos(v)
+                y = xy * Math.sin(sectorAngle); // r * cos(u) * sin(v)
+                this._addVertex(x, y, z);
+                // normalized vertex normal
+                nx = x * lengthInv;
+                ny = y * lengthInv;
+                nz = z * lengthInv;
+                // addNormal(nx, ny, nz);
+                // vertex tex coord between [0, 1]
+                s = j / sectorCount;
+                t = i / stackCount;
+                this._addTextureCoord(s, t);
+            }
+        }
+        // indices
+        //  k1--k1+1
+        //  |  / |
+        //  | /  |
+        //  k2--k2+1
+        var k1, k2;
+        for (i = 0; i < stackCount; ++i) {
+            k1 = i * (sectorCount + 1); // beginning of current stack
+            k2 = k1 + sectorCount + 1; // beginning of next stack
+            for (j = 0; j < sectorCount; ++j, ++k1, ++k2) {
+                // 2 triangles per sector excluding 1st and last stacks
+                if (i != 0) {
+                    this._addFace(k1, k2, k1 + 1); // k1---k2---k1+1
+                }
+                if (i != (stackCount - 1)) {
+                    this._addFace(k1 + 1, k2, k2 + 1); // k1+1---k2---k2+1
+                }
+                // // vertical lines for all stacks
+                // lineIndices.push_back(k1);
+                // lineIndices.push_back(k2);
+                // if (i != 0)  // horizontal lines except 1st stack
+                // {
+                // 	lineIndices.push_back(k1);
+                // 	lineIndices.push_back(k1 + 1);
+                // }
+            }
+        }
+    };
+    Sphere.prototype._addVertex = function (x, y, z) {
+        // var length = Math.sqrt(x * x + y * y + z * z);
+        // x /= length;
+        // y /= length;
+        // z /= length;
+        this.Points.push({
+            x: x,
+            y: y,
+            z: z,
+        });
+    };
+    Sphere.prototype._addTextureCoord = function (u, v) {
+        this.TextureCoords.push({
+            u: u,
+            v: v,
+        });
+    };
+    Sphere.prototype._addFace = function (x, y, z) {
+        this.TriangleIndices.push(x);
+        this.TriangleIndices.push(y);
+        this.TriangleIndices.push(z);
+    };
+    return Sphere;
+}());
+var Icosahedron3D = /** @class */ (function () {
     function Icosahedron3D(quality) {
         this._quality = quality;
         this._calculateGeometry();
@@ -293,12 +490,19 @@ var Icosahedron3D = (function () {
         this._addFace(9, 8, 1);
         this._refineVertices();
     };
-    Icosahedron3D.prototype._addVertex = function (x, y, z) {
+    Icosahedron3D.prototype._addVertex = function (x, y, z, u, v) {
+        if (u === void 0) { u = -1; }
+        if (v === void 0) { v = -1; }
         var length = Math.sqrt(x * x + y * y + z * z);
+        x /= length;
+        y /= length;
+        z /= length;
         this.Points.push({
-            x: x / length,
-            y: y / length,
-            z: z / length
+            x: x,
+            y: y,
+            z: z,
+            u: Math.asin(x) / Math.PI + .5,
+            v: -((y + 1) / 2) //-Math.asin(y) / Math.PI + .5
         });
         return this._index++;
     };
@@ -337,19 +541,20 @@ var Icosahedron3D = (function () {
         var middle = {
             x: (point1.x + point2.x) / 2.0,
             y: (point1.y + point2.y) / 2.0,
-            z: (point1.z + point2.z) / 2.0,
+            z: (point1.z + point2.z) / 2.0
         };
         var i = this._addVertex(middle.x, middle.y, middle.z);
         this._middlePointIndexCache[key] = i;
         return i;
     };
     return Icosahedron3D;
-})();
+}());
 function showRangeValue(prepend, sliderId, inputId) {
     document.getElementById(inputId).value = prepend + document.getElementById(sliderId).value;
 }
-(function () {
+function startApp() {
     var app = new App(document.getElementById('canvas'));
+    app.loadTexture('./img/earth.png');
     var drawMode = document.getElementById('drawMode');
     drawMode.addEventListener('change', function (e) { return app.SetDrawMode(drawMode.options[drawMode.selectedIndex].value); });
     var quality = document.getElementById('quality');
@@ -371,5 +576,10 @@ function showRangeValue(prepend, sliderId, inputId) {
     showRangeValue('Z:', 'sliderZ', 'sliderInputZ');
     showRangeValue('', 'sliderZoom', 'sliderInputZoom');
     app.Draw();
+}
+(function () {
+    var texture = new Image();
+    texture.src = './img/earth.png';
+    texture.onload = startApp;
 })();
 //# sourceMappingURL=index.js.map

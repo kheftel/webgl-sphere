@@ -4,7 +4,10 @@
   "description": "A Pen created at CodePen.io. You can find this one at http://codepen.io/aholmes/pen/MyGKZd.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start":"tsc && gulp",
+    "build":"tsc",
+    "watch-src": "tsc --watch"
   },
   "author": "",
   "license": "ISC",

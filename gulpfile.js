@@ -7,7 +7,7 @@ gulp.task('watch', function() {
 
 gulp.task('default', function() {
     browserSync.init({
-        proxy: "localhost:8004"
+        server:true
     });
 
 	gulp.watch('js/index.js', ['watch']);
