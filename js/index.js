@@ -196,7 +196,7 @@ var App = /** @class */ (function () {
         return (value & (value - 1)) == 0;
     };
     App.UseQuarternionVertShader = function (context) {
-        var vertCode = "\n\t\t\tattribute vec3 position;\n\t\t\tattribute vec2 uv;\n\n\t\t\tattribute highp vec3 aVertexNormal;\n\t\t\t\n\t\t\tuniform mat4 Pmatrix;\n\t\t\tuniform mat4 Vmatrix;\n\t\t\tuniform mat4 Mmatrix;\n\n\t\t\tattribute vec4 color;\n\t\t\tvarying lowp vec4 vColor;\n\n\t\t\tvarying vec3 vLightWeighting;\n\t\t\t\n\t\t\tuniform vec3 uAmbientColor;\n\t\t\tuniform vec3 uPointLightingLocation;\n\t\t\tuniform vec3 uPointLightingColor;\n\n\t\t\tvarying highp vec2 vTextureCoord;\n\n\t\t\tvoid main(void) {\n\t\t\t\t// Output tex coord to frag shader.\n\t\t\t\tvTextureCoord = uv;\n\t\t\t\t\n\t\t\t\tvec4 mvPosition = Mmatrix * vec4(position, 1.);\n\t\t\t\tgl_Position = Pmatrix*Vmatrix*mvPosition;\n\t\t\t\tgl_PointSize = 4.0;\n\t\t\t\tvColor = color;\n\n\t\t\t\tvec3 lightDirection = normalize(uPointLightingLocation - mvPosition.xyz);\n\t\t\t\tvec3 transformedNormal = vec3(Vmatrix) * aVertexNormal;\n\t\t\t\tfloat directionalLightWeighting = max(dot(transformedNormal, lightDirection), 0.0);\n\t\t\t\tvLightWeighting = uAmbientColor + uPointLightingColor * directionalLightWeighting;\n\t\t\t}";
+        var vertCode = "\n\t\t\tattribute vec3 position;\n\t\t\tattribute vec2 uv;\n\n\t\t\tattribute highp vec3 aVertexNormal;\n\t\t\t\n\t\t\tuniform mat4 Pmatrix;\n\t\t\tuniform mat4 Vmatrix;\n\t\t\tuniform mat4 Mmatrix;\n\n\t\t\t// attribute vec4 color;\n\t\t\t// varying lowp vec4 vColor;\n\n\t\t\tvarying vec3 vLightWeighting;\n\t\t\t\n\t\t\tuniform vec3 uAmbientColor;\n\t\t\tuniform vec3 uPointLightingLocation;\n\t\t\tuniform vec3 uPointLightingColor;\n\n\t\t\tvarying highp vec2 vTextureCoord;\n\n\t\t\tvoid main(void) {\n\t\t\t\t// Output tex coord to frag shader.\n\t\t\t\tvTextureCoord = uv;\n\t\t\t\t\n\t\t\t\tvec4 mvPosition = Mmatrix * vec4(position, 1.);\n\t\t\t\tgl_Position = Pmatrix*Vmatrix*mvPosition;\n\t\t\t\tgl_PointSize = 4.0;\n\t\t\t\t// vColor = color;\n\n\t\t\t\tvec3 lightDirection = normalize(uPointLightingLocation - mvPosition.xyz);\n\t\t\t\tvec3 transformedNormal = vec3(Vmatrix) * aVertexNormal;\n\t\t\t\tfloat directionalLightWeighting = max(dot(transformedNormal, lightDirection), 0.0);\n\t\t\t\tvLightWeighting = uAmbientColor + uPointLightingColor * directionalLightWeighting;\n\t\t\t}";
         var vertShader = context.createShader(context.VERTEX_SHADER);
         context.shaderSource(vertShader, vertCode);
         context.compileShader(vertShader);
@@ -209,7 +209,7 @@ var App = /** @class */ (function () {
         return vertShader;
     };
     App.UseVariableFragShader = function (context) {
-        var fragCode = "\n\t\t\tprecision mediump float;\n\t\t\tvarying lowp vec4 vColor;\n\t\t\tvarying vec3 vLightWeighting;\n\t\t\tuniform sampler2D uSampler;\n\t\t\tvarying highp vec2 vTextureCoord;\n\n\t\t\tvoid main(void) {\n\t\t\t\tgl_FragColor = texture2D(uSampler, vTextureCoord);//vec4(vColor.rgb, 1.);\n\t\t\t}";
+        var fragCode = "\n\t\t\tprecision mediump float;\n\t\t\t// varying lowp vec4 vColor;\n\t\t\tvarying vec3 vLightWeighting;\n\t\t\tuniform sampler2D uSampler;\n\t\t\tvarying highp vec2 vTextureCoord;\n\n\t\t\tvoid main(void) {\n\t\t\t\tgl_FragColor = texture2D(uSampler, vTextureCoord);//vec4(vColor.rgb, 1.);\n\t\t\t}";
         var fragShader = context.createShader(context.FRAGMENT_SHADER);
         context.shaderSource(fragShader, fragCode);
         context.compileShader(fragShader);
@@ -242,10 +242,10 @@ var App = /** @class */ (function () {
         var uv = ctx.getAttribLocation(shaderProgram, "uv");
         ctx.vertexAttribPointer(uv, 2, ctx.FLOAT, false, 0, 0);
         ctx.enableVertexAttribArray(uv);
-        ctx.bindBuffer(ctx.ARRAY_BUFFER, color_buffer);
-        var color = ctx.getAttribLocation(shaderProgram, "color");
-        ctx.vertexAttribPointer(color, 3, ctx.FLOAT, false, 0, 0);
-        ctx.enableVertexAttribArray(color);
+        // ctx.bindBuffer(ctx.ARRAY_BUFFER, color_buffer);
+        // var color = ctx.getAttribLocation(shaderProgram, "color");
+        // ctx.vertexAttribPointer(color, 3, ctx.FLOAT, false, 0, 0);
+        // ctx.enableVertexAttribArray(color);
         ctx.useProgram(shaderProgram);
         var ambientColor = ctx.getUniformLocation(shaderProgram, "uAmbientColor");
         var pointLightingLocation = ctx.getUniformLocation(shaderProgram, "uPointLightingLocation");

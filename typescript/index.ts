@@ -289,8 +289,8 @@ class App {
 			uniform mat4 Vmatrix;
 			uniform mat4 Mmatrix;
 
-			attribute vec4 color;
-			varying lowp vec4 vColor;
+			// attribute vec4 color;
+			// varying lowp vec4 vColor;
 
 			varying vec3 vLightWeighting;
 			
@@ -307,7 +307,7 @@ class App {
 				vec4 mvPosition = Mmatrix * vec4(position, 1.);
 				gl_Position = Pmatrix*Vmatrix*mvPosition;
 				gl_PointSize = 4.0;
-				vColor = color;
+				// vColor = color;
 
 				vec3 lightDirection = normalize(uPointLightingLocation - mvPosition.xyz);
 				vec3 transformedNormal = vec3(Vmatrix) * aVertexNormal;
@@ -333,7 +333,7 @@ class App {
 	public static UseVariableFragShader(context: WebGLRenderingContext) {
 		var fragCode = `
 			precision mediump float;
-			varying lowp vec4 vColor;
+			// varying lowp vec4 vColor;
 			varying vec3 vLightWeighting;
 			uniform sampler2D uSampler;
 			varying highp vec2 vTextureCoord;
@@ -384,10 +384,10 @@ class App {
 		ctx.vertexAttribPointer(uv, 2, ctx.FLOAT, false, 0, 0);
 		ctx.enableVertexAttribArray(uv);
 
-		ctx.bindBuffer(ctx.ARRAY_BUFFER, color_buffer);
-		var color = ctx.getAttribLocation(shaderProgram, "color");
-		ctx.vertexAttribPointer(color, 3, ctx.FLOAT, false, 0, 0);
-		ctx.enableVertexAttribArray(color);
+		// ctx.bindBuffer(ctx.ARRAY_BUFFER, color_buffer);
+		// var color = ctx.getAttribLocation(shaderProgram, "color");
+		// ctx.vertexAttribPointer(color, 3, ctx.FLOAT, false, 0, 0);
+		// ctx.enableVertexAttribArray(color);
 
 		ctx.useProgram(shaderProgram);
 
