@@ -3,18 +3,63 @@ interface IShaderProgram {
 	Pmatrix: WebGLUniformLocation;
 	Vmatrix: WebGLUniformLocation;
 	Mmatrix: WebGLUniformLocation;
+	NormalMatrix: WebGLUniformLocation;
 	ShaderProgram: WebGLProgram;
+}
+
+class Mesh {
+	public vertices: number[];
+	public normals: number[];
+	public uvs: number[];
+	public indices: number[];
+	public texture: WebGLTexture;
+	public vertexBuffer: WebGLBuffer;
+	public normalBuffer: WebGLBuffer;
+	public uvBuffer: WebGLBuffer;
+	public indexBuffer: WebGLBuffer;
+	public modelMatrix: Float32Array;
+	public normalMatrix: Float32Array;
+
+	public prepBuffers(ctx: WebGLRenderingContext) {
+		this.vertexBuffer = ctx.createBuffer();
+		ctx.bindBuffer(ctx.ARRAY_BUFFER, this.vertexBuffer);
+		ctx.bufferData(ctx.ARRAY_BUFFER, new Float32Array(this.vertices), ctx.STATIC_DRAW);
+
+		this.normalBuffer = ctx.createBuffer();
+		ctx.bindBuffer(ctx.ARRAY_BUFFER, this.normalBuffer);
+		ctx.bufferData(ctx.ARRAY_BUFFER, new Float32Array(this.normals), ctx.STATIC_DRAW);
+
+		this.uvBuffer = ctx.createBuffer();
+		ctx.bindBuffer(ctx.ARRAY_BUFFER, this.uvBuffer);
+		ctx.bufferData(ctx.ARRAY_BUFFER, new Float32Array(this.uvs), ctx.STATIC_DRAW);
+
+		this.indexBuffer = ctx.createBuffer();
+		ctx.bindBuffer(ctx.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
+		ctx.bufferData(ctx.ELEMENT_ARRAY_BUFFER, new Uint16Array(this.indices), ctx.STATIC_DRAW);
+	}
+
+	public updateNormalMatrix() {
+		Matrix.Invert(this.normalMatrix, this.modelMatrix);
+		Matrix.Transpose(this.normalMatrix, this.normalMatrix);
+	}
+
+	constructor() {
+		this.modelMatrix = Matrix.Create();
+		this.normalMatrix = Matrix.Create();
+	}
 }
 
 class App {
 	private _canvas: HTMLCanvasElement;
 	private _ctx: WebGLRenderingContext;
 	private _vertices: number[];
+	private _normals: number[];
 	private _uvs: number[];
 	private _indices: number[];
-	private _colors: number[];
 	private _shader: IShaderProgram;
-	private _texture: WebGLTexture;
+	private _textures: WebGLTexture[];
+
+	private _earth: Mesh;
 
 	private _config:
 		{
@@ -30,16 +75,6 @@ class App {
 				Z: number;
 			}
 		};
-
-	private _definedColors =
-		[
-			//[.1, .1, .1, 1],    // white
-			[.1, .0, .0, 1],    // red
-			[.0, .1, .0, 1],    // green
-			[.0, .0, .1, 1],    // blue
-			//[.1, .1, .0, 1],    // yellow
-			//[.1, .0, .1, 1]     // purple
-		];
 
 	private _qualityData =
 		[
@@ -70,58 +105,48 @@ class App {
 				Z: 0
 			}
 		};
+
+		this._textures = [];
 	}
 
 	private _setData() {
 		var ctx = this._ctx;
 
-		// var icosahedron = new Icosahedron3D(this._config.Quality);
-		// this._vertices = <number[]><any>icosahedron.Points.reduce((a, b, i) => i === 1 ? [a.x, a.y, a.z, b.x, b.y, b.z] : (<any>a).concat([b.x, b.y, b.z]));
-		// this._uvs = <number[]><any>icosahedron.Points.reduce((a, b, i) => i === 1 ? [a.u, a.v, b.u, b.v] : (<any>a).concat([b.u, b.v]));
-		// this._indices = icosahedron.TriangleIndices;
-		var sphere = new Sphere(7, this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
+		var radius = 7.0;
+
+		var sphere = new Sphere(radius, this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
 		console.log(this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
-		this._vertices = <number[]><any>sphere.Points.reduce((a, b, i) => i === 1 ? [a.x, a.y, a.z, b.x, b.y, b.z] : (<any>a).concat([b.x, b.y, b.z]));
-		this._uvs = <number[]><any>sphere.TextureCoords.reduce((a, b, i) => i === 1 ? [a.u, a.v, b.u, b.v] : (<any>a).concat([b.u, b.v]));
-		this._indices = sphere.TriangleIndices;
 
-		this._colors = this._generateColors(this._vertices);
+		var earth = new Mesh();
+		earth.vertices = sphere.getVertices();
+		earth.normals = sphere.getNormals();
+		earth.uvs = sphere.getUVs();
+		earth.indices = sphere.getIndices();
+		earth.prepBuffers(ctx);
+		earth.texture = this._textures[0];
+		Matrix.RotateX(earth.modelMatrix, 3 * Math.PI / 2);
+		Matrix.RotateY(earth.modelMatrix, Math.PI);
+		earth.updateNormalMatrix();
 
-		var vertex_buffer = ctx.createBuffer();
-		ctx.bindBuffer(ctx.ARRAY_BUFFER, vertex_buffer);
-		ctx.bufferData(ctx.ARRAY_BUFFER, new Float32Array(this._vertices), ctx.STATIC_DRAW);
-
-		var color_buffer = ctx.createBuffer();
-		ctx.bindBuffer(ctx.ARRAY_BUFFER, color_buffer);
-		ctx.bufferData(ctx.ARRAY_BUFFER, new Float32Array(this._colors), ctx.STATIC_DRAW);
-
-		var uv_buffer = ctx.createBuffer();
-		ctx.bindBuffer(ctx.ARRAY_BUFFER, uv_buffer);
-		ctx.bufferData(ctx.ARRAY_BUFFER, new Float32Array(this._uvs), ctx.STATIC_DRAW);
-
-		var index_buffer = ctx.createBuffer();
-		ctx.bindBuffer(ctx.ELEMENT_ARRAY_BUFFER, index_buffer);
-		ctx.bufferData(ctx.ELEMENT_ARRAY_BUFFER, new Uint16Array(this._indices), ctx.STATIC_DRAW);
+		var sphere2 = new Sphere(radius * 1.02, this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
+		var clouds = new Mesh();
+		clouds.vertices = sphere2.getVertices();
+		clouds.normals = sphere2.getNormals();
+		clouds.uvs = sphere2.getUVs();
+		clouds.indices = sphere2.getIndices();
+		clouds.prepBuffers(ctx);
+		clouds.texture = this._textures[1];
+		Matrix.RotateX(clouds.modelMatrix, 3 * Math.PI / 2);
+		Matrix.RotateY(clouds.modelMatrix, Math.PI);
+		Matrix.Translate(clouds.modelMatrix, clouds.modelMatrix, [0, 0, 0]);
+		clouds.updateNormalMatrix();
 
 		return {
-			vertex: vertex_buffer,
-			uv: uv_buffer,
-			color: color_buffer,
-			index: index_buffer
+			meshes: [earth, clouds]
 		};
 	}
 
-	private _generateColors(vertices: number[]) {
-		let colors: number[][] = [];
-
-		for (let i = 0; i < vertices.length; i += 4) {
-			colors[i] = this._definedColors[colors.length % this._definedColors.length];
-		}
-
-		return colors.reduce((a, b) => a.concat(b));
-	}
-
-	private _animate(proj_matrix: Float32Array, view_matrix: Float32Array, mov_matrix: Float32Array) {
+	private _animate(proj_matrix: Float32Array, view_matrix: Float32Array, meshes: Mesh[]) {
 		const ctx = this._ctx;
 		const rotThetas = this._config.Rotation;
 
@@ -130,13 +155,6 @@ class App {
 		const execAnimation = (time: number) => {
 			var dt = time - time_old;
 			time_old = time;
-
-			for (var axis in rotThetas) {
-				var theta = rotThetas[axis];
-				if (theta > 0.0 || theta < 0.0) {
-					(<any>Matrix)[`Rotate${axis}`](mov_matrix, dt * theta);
-				}
-			}
 
 			if (Math.abs(this._config.ZoomLevel - zoomLevel_old) >= 0.01) {
 				view_matrix[14] = view_matrix[14] + (zoomLevel_old * -1) + this._config.ZoomLevel;
@@ -152,18 +170,51 @@ class App {
 
 			ctx.uniformMatrix4fv(this._shader.Pmatrix, false, proj_matrix);
 			ctx.uniformMatrix4fv(this._shader.Vmatrix, false, view_matrix);
-			ctx.uniformMatrix4fv(this._shader.Mmatrix, false, mov_matrix);
 
-			// Tell WebGL we want to affect texture unit 0
-			ctx.activeTexture(ctx.TEXTURE0);
+			for (var i = 0; i < meshes.length; i++) {
+				var mesh = meshes[i];
 
-			// Bind the texture to texture unit 0
-			ctx.bindTexture(ctx.TEXTURE_2D, this._texture);
+				for (var axis in rotThetas) {
+					var theta = rotThetas[axis];
+					if (theta > 0.0 || theta < 0.0) {
+						(<any>Matrix)[`Rotate${axis}`](mesh.modelMatrix, dt * theta);
+					}
+				}
 
-			// Tell the shader we bound the texture to texture unit 0
-			ctx.uniform1i(ctx.getUniformLocation(this._shader.ShaderProgram, 'uSampler'), 0);
+				mesh.updateNormalMatrix();
+				ctx.uniformMatrix4fv(this._shader.Mmatrix, false, mesh.modelMatrix);
+				ctx.uniformMatrix4fv(this._shader.NormalMatrix, false, mesh.normalMatrix);
 
-			ctx.drawElements(this._config.DrawMode, this._indices.length, ctx.UNSIGNED_SHORT, 0);
+				var shaderProgram = this._shader.ShaderProgram;
+				var position = ctx.getAttribLocation(shaderProgram, "position");
+				ctx.bindBuffer(ctx.ARRAY_BUFFER, mesh.vertexBuffer);
+				ctx.vertexAttribPointer(position, 3, ctx.FLOAT, false, 0, 0);
+				ctx.enableVertexAttribArray(position);
+
+				ctx.bindBuffer(ctx.ARRAY_BUFFER, mesh.normalBuffer);
+				var normal = ctx.getAttribLocation(shaderProgram, "normal");
+				ctx.vertexAttribPointer(normal, 3, ctx.FLOAT, false, 0, 0);
+				ctx.enableVertexAttribArray(normal);
+
+				ctx.bindBuffer(ctx.ARRAY_BUFFER, mesh.uvBuffer);
+				var uv = ctx.getAttribLocation(shaderProgram, "uv");
+				ctx.vertexAttribPointer(uv, 2, ctx.FLOAT, false, 0, 0);
+				ctx.enableVertexAttribArray(uv);
+
+				// set mesh's texture to sampler 0
+				ctx.activeTexture(ctx.TEXTURE0);
+				ctx.bindTexture(ctx.TEXTURE_2D, mesh.texture);
+				ctx.uniform1i(ctx.getUniformLocation(this._shader.ShaderProgram, 'uSampler'), 0);
+
+				// use mesh's index buffer
+				ctx.bindBuffer(ctx.ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
+
+				ctx.enable(ctx.BLEND);
+				ctx.blendFunc(ctx.ONE, ctx.ONE_MINUS_SRC_ALPHA);
+
+				// draw mesh
+				ctx.drawElements(this._config.DrawMode, mesh.indices.length, ctx.UNSIGNED_SHORT, 0);
+			}
 
 			window.requestAnimationFrame(execAnimation);
 		}
@@ -172,16 +223,20 @@ class App {
 	}
 
 	public Draw() {
-		var buffers = this._setData();
+		var data = this._setData();
 
-		this._shader = App.UseQuarternionShaderProgram(this._ctx, buffers.vertex, buffers.color, buffers.uv, this._texture);
+		this._shader = App.UseQuarternionShaderProgram(this._ctx);
 
-		var proj_matrix = new Float32Array(Matrix.GetProjection(40, this._canvas.width / this._canvas.height, 1, 100));
-		var view_matrix = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
-		var mov_matrix = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
-		Matrix.RotateX(mov_matrix, 3 * Math.PI / 2);
+		var proj_matrix = Matrix.GetProjection(45, this._canvas.width / this._canvas.height, 1, 100);
+		var view_matrix = Matrix.Create();
+		// var mov_matrix = Matrix.Create();
+		// Matrix.RotateX(mov_matrix, 3 * Math.PI / 2);
+		// Matrix.RotateY(mov_matrix, Math.PI);
+		// var normal_matrix = Matrix.Create();
+		// Matrix.Invert(normal_matrix, mov_matrix);
+		// Matrix.Transpose(normal_matrix, normal_matrix);
 
-		this._animate(proj_matrix, view_matrix, mov_matrix);
+		this._animate(proj_matrix, view_matrix, data.meshes);
 	}
 
 	public SetDrawMode(value: string) {
@@ -198,7 +253,7 @@ class App {
 		this._config.Quality = intValue;
 
 		var buffers = this._setData();
-		this._shader = App.UseQuarternionShaderProgram(this._ctx, buffers.vertex, buffers.color, buffers.uv, this._texture);
+		this._shader = App.UseQuarternionShaderProgram(this._ctx);
 	}
 
 	public GetRotation(axis: string) {
@@ -226,7 +281,7 @@ class App {
 	// Initialize a texture and load an image.
 	// When the image finished loading copy it into the texture.
 	//
-	public loadTexture(url: string) {
+	public loadTexture(url: string, index: number) {
 		var gl = this._ctx;
 		const texture = gl.createTexture();
 		gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -270,8 +325,7 @@ class App {
 		};
 		image.src = url;
 
-		this._texture = texture;
-		return texture;
+		this._textures[index] = texture;
 	}
 
 	public static isPowerOf2(value: number) {
@@ -281,6 +335,7 @@ class App {
 	public static UseQuarternionVertShader(context: WebGLRenderingContext) {
 		var vertCode = `
 			attribute vec3 position;
+			attribute vec3 normal;
 			attribute vec2 uv;
 
 			attribute highp vec3 aVertexNormal;
@@ -288,9 +343,7 @@ class App {
 			uniform mat4 Pmatrix;
 			uniform mat4 Vmatrix;
 			uniform mat4 Mmatrix;
-
-			// attribute vec4 color;
-			// varying lowp vec4 vColor;
+			uniform mat4 NormalMatrix;
 
 			varying vec3 vLightWeighting;
 			
@@ -299,20 +352,29 @@ class App {
 			uniform vec3 uPointLightingColor;
 
 			varying highp vec2 vTextureCoord;
+			varying highp vec3 vLighting;
 
 			void main(void) {
 				// Output tex coord to frag shader.
 				vTextureCoord = uv;
 				
-				vec4 mvPosition = Mmatrix * vec4(position, 1.);
-				gl_Position = Pmatrix*Vmatrix*mvPosition;
+				// set position of vertex
+				gl_Position = Pmatrix * Vmatrix * Mmatrix * vec4(position, 1.);
 				gl_PointSize = 4.0;
-				// vColor = color;
 
-				vec3 lightDirection = normalize(uPointLightingLocation - mvPosition.xyz);
-				vec3 transformedNormal = vec3(Vmatrix) * aVertexNormal;
-				float directionalLightWeighting = max(dot(transformedNormal, lightDirection), 0.0);
-				vLightWeighting = uAmbientColor + uPointLightingColor * directionalLightWeighting;
+				// Apply lighting effect
+				highp vec3 ambientLight = vec3(0.3, 0.3, 0.3);
+				highp vec3 directionalLightColor = vec3(1, 1, 1);
+				highp vec3 directionalVector = normalize(vec3(0.85, 0.8, 0.75));
+				// highp vec3 directionalVector = normalize(vec3(0, 0, -1));
+				highp vec4 transformedNormal = NormalMatrix * vec4(normal, 1.0);
+				highp float directional = max(dot(transformedNormal.xyz, directionalVector), 0.0);
+				vLighting = ambientLight + (directionalLightColor * directional);				
+
+				// vec3 lightDirection = normalize(uPointLightingLocation - mvPosition.xyz);
+				// vec3 transformedNormal = vec3(Vmatrix) * aVertexNormal;
+				// float directionalLightWeighting = max(dot(transformedNormal, lightDirection), 0.0);
+				// vLightWeighting = uAmbientColor + uPointLightingColor * directionalLightWeighting;
 			}`;
 
 		var vertShader = context.createShader(context.VERTEX_SHADER);
@@ -332,14 +394,14 @@ class App {
 
 	public static UseVariableFragShader(context: WebGLRenderingContext) {
 		var fragCode = `
-			precision mediump float;
-			// varying lowp vec4 vColor;
-			varying vec3 vLightWeighting;
-			uniform sampler2D uSampler;
 			varying highp vec2 vTextureCoord;
+			varying highp vec3 vLighting;
+
+			uniform sampler2D uSampler;
 
 			void main(void) {
-				gl_FragColor = texture2D(uSampler, vTextureCoord);//vec4(vColor.rgb, 1.);
+				highp vec4 texelColor = texture2D(uSampler, vTextureCoord); //vec4(vColor.rgb, 1.);
+				gl_FragColor = vec4(texelColor.rgb * vLighting * texelColor.a, texelColor.a);
 			}`;
 
 		var fragShader = context.createShader(context.FRAGMENT_SHADER);
@@ -355,7 +417,7 @@ class App {
 		return fragShader;
 	}
 
-	public static UseQuarternionShaderProgram(ctx: WebGLRenderingContext, vertex_buffer: WebGLBuffer, color_buffer: WebGLBuffer, uv_buffer: WebGLBuffer, texture: WebGLTexture): IShaderProgram {
+	public static UseQuarternionShaderProgram(ctx: WebGLRenderingContext): IShaderProgram {
 		var vertShader = App.UseQuarternionVertShader(ctx);
 		var fragShader = App.UseVariableFragShader(ctx);
 
@@ -373,21 +435,22 @@ class App {
 		var Pmatrix = ctx.getUniformLocation(shaderProgram, "Pmatrix");
 		var Vmatrix = ctx.getUniformLocation(shaderProgram, "Vmatrix");
 		var Mmatrix = ctx.getUniformLocation(shaderProgram, "Mmatrix");
+		var NormalMatrix = ctx.getUniformLocation(shaderProgram, "NormalMatrix");
 
-		ctx.bindBuffer(ctx.ARRAY_BUFFER, vertex_buffer);
-		var position = ctx.getAttribLocation(shaderProgram, "position");
-		ctx.vertexAttribPointer(position, 3, ctx.FLOAT, false, 0, 0);
-		ctx.enableVertexAttribArray(position);
+		// ctx.bindBuffer(ctx.ARRAY_BUFFER, vertex_buffer);
+		// var position = ctx.getAttribLocation(shaderProgram, "position");
+		// ctx.vertexAttribPointer(position, 3, ctx.FLOAT, false, 0, 0);
+		// ctx.enableVertexAttribArray(position);
 
-		ctx.bindBuffer(ctx.ARRAY_BUFFER, uv_buffer);
-		var uv = ctx.getAttribLocation(shaderProgram, "uv");
-		ctx.vertexAttribPointer(uv, 2, ctx.FLOAT, false, 0, 0);
-		ctx.enableVertexAttribArray(uv);
+		// ctx.bindBuffer(ctx.ARRAY_BUFFER, normal_buffer);
+		// var normal = ctx.getAttribLocation(shaderProgram, "normal");
+		// ctx.vertexAttribPointer(normal, 3, ctx.FLOAT, false, 0, 0);
+		// ctx.enableVertexAttribArray(normal);
 
-		// ctx.bindBuffer(ctx.ARRAY_BUFFER, color_buffer);
-		// var color = ctx.getAttribLocation(shaderProgram, "color");
-		// ctx.vertexAttribPointer(color, 3, ctx.FLOAT, false, 0, 0);
-		// ctx.enableVertexAttribArray(color);
+		// ctx.bindBuffer(ctx.ARRAY_BUFFER, uv_buffer);
+		// var uv = ctx.getAttribLocation(shaderProgram, "uv");
+		// ctx.vertexAttribPointer(uv, 2, ctx.FLOAT, false, 0, 0);
+		// ctx.enableVertexAttribArray(uv);
 
 		ctx.useProgram(shaderProgram);
 
@@ -402,20 +465,190 @@ class App {
 			Pmatrix: Pmatrix,
 			Vmatrix: Vmatrix,
 			Mmatrix: Mmatrix,
+			NormalMatrix: NormalMatrix,
 			ShaderProgram: shaderProgram
 		};
 	}
 }
 
 class Matrix {
+	public static Create() {
+		return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+	}
+
 	public static GetProjection(angle: number, a: number, zMin: number, zMax: number) {
 		var ang = Math.tan((angle * .5) * Math.PI / 180);
-		return [
+		return new Float32Array([
 			0.5 / ang, 0, 0, 0,
 			0, 0.5 * a / ang, 0, 0,
 			0, 0, -(zMax + zMin) / (zMax - zMin), -1,
 			0, 0, (-2 * zMax * zMin) / (zMax - zMin), 0
-		];
+		]);
+	}
+
+	public static Clone(a: Float32Array) {
+		let out = Matrix.Create();
+		out[0] = a[0];
+		out[1] = a[1];
+		out[2] = a[2];
+		out[3] = a[3];
+		out[4] = a[4];
+		out[5] = a[5];
+		out[6] = a[6];
+		out[7] = a[7];
+		out[8] = a[8];
+		out[9] = a[9];
+		out[10] = a[10];
+		out[11] = a[11];
+		out[12] = a[12];
+		out[13] = a[13];
+		out[14] = a[14];
+		out[15] = a[15];
+		return out;
+	}
+
+	public static Copy(out: Float32Array, a: Float32Array) {
+		out[0] = a[0];
+		out[1] = a[1];
+		out[2] = a[2];
+		out[3] = a[3];
+		out[4] = a[4];
+		out[5] = a[5];
+		out[6] = a[6];
+		out[7] = a[7];
+		out[8] = a[8];
+		out[9] = a[9];
+		out[10] = a[10];
+		out[11] = a[11];
+		out[12] = a[12];
+		out[13] = a[13];
+		out[14] = a[14];
+		out[15] = a[15];
+		return out;
+	}
+
+	public static Identity(out: Float32Array) {
+		out[0] = 1;
+		out[1] = 0;
+		out[2] = 0;
+		out[3] = 0;
+		out[4] = 0;
+		out[5] = 1;
+		out[6] = 0;
+		out[7] = 0;
+		out[8] = 0;
+		out[9] = 0;
+		out[10] = 1;
+		out[11] = 0;
+		out[12] = 0;
+		out[13] = 0;
+		out[14] = 0;
+		out[15] = 1;
+		return out;
+	}
+
+	public static Transpose(out: Float32Array, a: Float32Array) {
+		// If we are transposing ourselves we can skip a few steps but have to cache some values
+		if (out === a) {
+			let a01 = a[1],
+				a02 = a[2],
+				a03 = a[3];
+			let a12 = a[6],
+				a13 = a[7];
+			let a23 = a[11];
+
+			out[1] = a[4];
+			out[2] = a[8];
+			out[3] = a[12];
+			out[4] = a01;
+			out[6] = a[9];
+			out[7] = a[13];
+			out[8] = a02;
+			out[9] = a12;
+			out[11] = a[14];
+			out[12] = a03;
+			out[13] = a13;
+			out[14] = a23;
+		} else {
+			out[0] = a[0];
+			out[1] = a[4];
+			out[2] = a[8];
+			out[3] = a[12];
+			out[4] = a[1];
+			out[5] = a[5];
+			out[6] = a[9];
+			out[7] = a[13];
+			out[8] = a[2];
+			out[9] = a[6];
+			out[10] = a[10];
+			out[11] = a[14];
+			out[12] = a[3];
+			out[13] = a[7];
+			out[14] = a[11];
+			out[15] = a[15];
+		}
+
+		return out;
+	}
+
+	public static Invert(out: Float32Array, a: Float32Array) {
+		let a00 = a[0],
+			a01 = a[1],
+			a02 = a[2],
+			a03 = a[3];
+		let a10 = a[4],
+			a11 = a[5],
+			a12 = a[6],
+			a13 = a[7];
+		let a20 = a[8],
+			a21 = a[9],
+			a22 = a[10],
+			a23 = a[11];
+		let a30 = a[12],
+			a31 = a[13],
+			a32 = a[14],
+			a33 = a[15];
+
+		let b00 = a00 * a11 - a01 * a10;
+		let b01 = a00 * a12 - a02 * a10;
+		let b02 = a00 * a13 - a03 * a10;
+		let b03 = a01 * a12 - a02 * a11;
+		let b04 = a01 * a13 - a03 * a11;
+		let b05 = a02 * a13 - a03 * a12;
+		let b06 = a20 * a31 - a21 * a30;
+		let b07 = a20 * a32 - a22 * a30;
+		let b08 = a20 * a33 - a23 * a30;
+		let b09 = a21 * a32 - a22 * a31;
+		let b10 = a21 * a33 - a23 * a31;
+		let b11 = a22 * a33 - a23 * a32;
+
+		// Calculate the determinant
+		let det =
+			b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+
+		if (!det) {
+			return null;
+		}
+		det = 1.0 / det;
+
+		out[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
+		out[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
+		out[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det;
+		out[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+		out[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det;
+		out[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
+		out[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det;
+		out[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+		out[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det;
+		out[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
+		out[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det;
+		out[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+		out[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det;
+		out[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
+		out[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det;
+		out[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+
+		return out;
 	}
 
 	public static RotateX(m: Float32Array, angle: number) {
@@ -459,57 +692,119 @@ class Matrix {
 		m[9] = c * m[9] + s * mv8;
 	}
 
-	public static Translate(a: number[] | Float32Array, b: number[] | Float32Array, c?: number[] | Float32Array) {
-		var d = b[0],
-			e = b[1],
-			s = b[2];
-		if (!c || a == c) {
-			a[12] = a[0] * d + a[4] * e + a[8] * s + a[12];
-			a[13] = a[1] * d + a[5] * e + a[9] * s + a[13];
-			a[14] = a[2] * d + a[6] * e + a[10] * s + a[14];
-			a[15] = a[3] * d + a[7] * e + a[11] * s + a[15];
-			return a;
+	public static Translate(out: Float32Array, a: Float32Array, v: number[]) {
+		let x = v[0],
+			y = v[1],
+			z = v[2];
+		let a00, a01, a02, a03;
+		let a10, a11, a12, a13;
+		let a20, a21, a22, a23;
+
+		if (a === out) {
+			out[12] = a[0] * x + a[4] * y + a[8] * z + a[12];
+			out[13] = a[1] * x + a[5] * y + a[9] * z + a[13];
+			out[14] = a[2] * x + a[6] * y + a[10] * z + a[14];
+			out[15] = a[3] * x + a[7] * y + a[11] * z + a[15];
+		} else {
+			a00 = a[0];
+			a01 = a[1];
+			a02 = a[2];
+			a03 = a[3];
+			a10 = a[4];
+			a11 = a[5];
+			a12 = a[6];
+			a13 = a[7];
+			a20 = a[8];
+			a21 = a[9];
+			a22 = a[10];
+			a23 = a[11];
+
+			out[0] = a00;
+			out[1] = a01;
+			out[2] = a02;
+			out[3] = a03;
+			out[4] = a10;
+			out[5] = a11;
+			out[6] = a12;
+			out[7] = a13;
+			out[8] = a20;
+			out[9] = a21;
+			out[10] = a22;
+			out[11] = a23;
+
+			out[12] = a00 * x + a10 * y + a20 * z + a[12];
+			out[13] = a01 * x + a11 * y + a21 * z + a[13];
+			out[14] = a02 * x + a12 * y + a22 * z + a[14];
+			out[15] = a03 * x + a13 * y + a23 * z + a[15];
 		}
-		var g = a[0],
-			f = a[1],
-			h = a[2],
-			i = a[3],
-			j = a[4],
-			k = a[5],
-			l = a[6],
-			o = a[7],
-			m = a[8],
-			n = a[9],
-			p = a[10],
-			r = a[11];
-		c[0] = g;
-		c[1] = f;
-		c[2] = h;
-		c[3] = i;
-		c[4] = j;
-		c[5] = k;
-		c[6] = l;
-		c[7] = o;
-		c[8] = m;
-		c[9] = n;
-		c[10] = p;
-		c[11] = r;
-		c[12] = g * d + j * e + m * s + a[12];
-		c[13] = f * d + k * e + n * s + a[13];
-		c[14] = h * d + l * e + p * s + a[14];
-		c[15] = i * d + o * e + r * s + a[15];
-		return c;
+
+		return out;
 	};
+
+	public static Multiply(out: Float32Array, a: Float32Array, b: Float32Array) {
+		let a00 = a[0],
+			a01 = a[1],
+			a02 = a[2],
+			a03 = a[3];
+		let a10 = a[4],
+			a11 = a[5],
+			a12 = a[6],
+			a13 = a[7];
+		let a20 = a[8],
+			a21 = a[9],
+			a22 = a[10],
+			a23 = a[11];
+		let a30 = a[12],
+			a31 = a[13],
+			a32 = a[14],
+			a33 = a[15];
+
+		// Cache only the current line of the second matrix
+		let b0 = b[0],
+			b1 = b[1],
+			b2 = b[2],
+			b3 = b[3];
+		out[0] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+		out[1] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+		out[2] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+		out[3] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+
+		b0 = b[4];
+		b1 = b[5];
+		b2 = b[6];
+		b3 = b[7];
+		out[4] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+		out[5] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+		out[6] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+		out[7] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+
+		b0 = b[8];
+		b1 = b[9];
+		b2 = b[10];
+		b3 = b[11];
+		out[8] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+		out[9] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+		out[10] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+		out[11] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+
+		b0 = b[12];
+		b1 = b[13];
+		b2 = b[14];
+		b3 = b[15];
+		out[12] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+		out[13] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+		out[14] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+		out[15] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+		return out;
+	}
 
 }
 
 class Sphere {
 	public Points: { x: number; y: number; z: number }[];
+	public Normals: { x: number, y: number, z: number }[];
 	public TextureCoords: { u: number, v: number }[];
 	public TriangleIndices: number[];
-
-	private _middlePointIndexCache: { [key: number]: number };
-	private _quality: number;
 
 	private _radius: number;
 	private _sectorCount: number;
@@ -522,11 +817,27 @@ class Sphere {
 		this._calculateGeometry();
 	}
 
+	public getVertices() {
+		return <number[]><any>this.Points.reduce((a, b, i) => i === 1 ? [a.x, a.y, a.z, b.x, b.y, b.z] : (<any>a).concat([b.x, b.y, b.z]));
+	}
+
+	public getNormals() {
+		return <number[]><any>this.Normals.reduce((a, b, i) => i === 1 ? [a.x, a.y, a.z, b.x, b.y, b.z] : (<any>a).concat([b.x, b.y, b.z]));
+	}
+
+	public getUVs() {
+		return <number[]><any>this.TextureCoords.reduce((a, b, i) => i === 1 ? [a.u, a.v, b.u, b.v] : (<any>a).concat([b.u, b.v]));
+	}
+
+	public getIndices() {
+		return this.TriangleIndices;
+	}
+
 	private _calculateGeometry() {
 		this.Points = [];
-		this.TriangleIndices = [];
+		this.Normals = [];
 		this.TextureCoords = [];
-		this._middlePointIndexCache = {};
+		this.TriangleIndices = [];
 
 		///////////////////////////////////////////////////////////////////////////////
 		// build vertices of sphere with smooth shading using parametric equation
@@ -568,7 +879,7 @@ class Sphere {
 				nx = x * lengthInv;
 				ny = y * lengthInv;
 				nz = z * lengthInv;
-				// addNormal(nx, ny, nz);
+				this._addNormal(nx, ny, nz);
 
 				// vertex tex coord between [0, 1]
 				s = j / sectorCount;
@@ -621,6 +932,18 @@ class Sphere {
 		});
 	}
 
+	private _addNormal(x: number, y: number, z: number) {
+		// var length = Math.sqrt(x * x + y * y + z * z);
+		// x /= length;
+		// y /= length;
+		// z /= length;
+		this.Normals.push({
+			x: x,
+			y: y,
+			z: z,
+		});
+	}
+
 	private _addTextureCoord(u: number, v: number) {
 		this.TextureCoords.push({
 			u: u,
@@ -635,133 +958,6 @@ class Sphere {
 	}
 }
 
-class Icosahedron3D {
-	public Points: { x: number; y: number; z: number, u: number, v: number }[];
-	public TriangleIndices: number[];
-
-	private _middlePointIndexCache: { [key: number]: number };
-	private _quality: number;
-	private _index: number;
-
-	constructor(quality: number) {
-		this._quality = quality;
-		this._calculateGeometry();
-	}
-
-	private _calculateGeometry() {
-		this.Points = [];
-		this.TriangleIndices = [];
-		this._middlePointIndexCache = {};
-		this._index = 0;
-
-		var t = (1.0 + Math.sqrt(5.0)) / 2.0;
-
-		this._addVertex(-1, t, 0);
-		this._addVertex(1, t, 0);
-		this._addVertex(-1, -t, 0);
-		this._addVertex(1, -t, 0);
-
-		this._addVertex(0, -1, t);
-		this._addVertex(0, 1, t);
-		this._addVertex(0, -1, -t);
-		this._addVertex(0, 1, -t);
-
-		this._addVertex(t, 0, -1);
-		this._addVertex(t, 0, 1);
-		this._addVertex(-t, 0, -1);
-		this._addVertex(-t, 0, 1);
-
-		this._addFace(0, 11, 5);
-		this._addFace(0, 5, 1);
-		this._addFace(0, 1, 7);
-		this._addFace(0, 7, 10);
-		this._addFace(0, 10, 11);
-
-		this._addFace(1, 5, 9);
-		this._addFace(5, 11, 4);
-		this._addFace(11, 10, 2);
-		this._addFace(10, 7, 6);
-		this._addFace(7, 1, 8);
-
-		this._addFace(3, 9, 4);
-		this._addFace(3, 4, 2);
-		this._addFace(3, 2, 6);
-		this._addFace(3, 6, 8);
-		this._addFace(3, 8, 9);
-
-		this._addFace(4, 9, 5);
-		this._addFace(2, 4, 11);
-		this._addFace(6, 2, 10);
-		this._addFace(8, 6, 7);
-		this._addFace(9, 8, 1);
-
-		this._refineVertices();
-	}
-
-	private _addVertex(x: number, y: number, z: number, u: number = -1, v: number = -1) {
-		var length = Math.sqrt(x * x + y * y + z * z);
-		x /= length;
-		y /= length;
-		z /= length;
-		this.Points.push({
-			x: x,
-			y: y,
-			z: z,
-			u: Math.asin(x) / Math.PI + .5,
-			v: -((y + 1) / 2)//-Math.asin(y) / Math.PI + .5
-		});
-		return this._index++;
-	}
-
-	private _addFace(x: number, y: number, z: number) {
-		this.TriangleIndices.push(x);
-		this.TriangleIndices.push(y);
-		this.TriangleIndices.push(z);
-	}
-
-	private _refineVertices() {
-		for (var i = 0; i < this._quality; i++) {
-			var faceCount = this.TriangleIndices.length;
-			for (var face = 0; face < faceCount; face += 3) {
-				var x1 = this.TriangleIndices[face];
-				var y1 = this.TriangleIndices[face + 1];
-				var z1 = this.TriangleIndices[face + 2];
-
-				var x2 = this._getMiddlePoint(x1, y1);
-				var y2 = this._getMiddlePoint(y1, z1);
-				var z2 = this._getMiddlePoint(z1, x1);
-
-				this._addFace(x1, x2, z2);
-				this._addFace(y1, y2, x2);
-				this._addFace(z1, z2, y2);
-				this._addFace(x2, y2, z2);
-			}
-		}
-	}
-
-	private _getMiddlePoint(p1: number, p2: number) {
-		var firstIsSmaller = p1 < p2;
-		var smallerIndex = firstIsSmaller ? p1 : p2;
-		var greaterIndex = firstIsSmaller ? p2 : p1;
-		var key = (smallerIndex << 32) + greaterIndex;
-
-		var p = this._middlePointIndexCache[key];
-		if (p !== undefined) p;
-
-		var point1 = this.Points[p1];
-		var point2 = this.Points[p2];
-		var middle = {
-			x: (point1.x + point2.x) / 2.0,
-			y: (point1.y + point2.y) / 2.0,
-			z: (point1.z + point2.z) / 2.0
-		};
-
-		var i = this._addVertex(middle.x, middle.y, middle.z);
-		this._middlePointIndexCache[key] = i;
-		return i;
-	}
-}
-
 function showRangeValue(prepend: string, sliderId: string, inputId: string) {
 	(<HTMLInputElement>document.getElementById(inputId)).value = prepend + (<HTMLInputElement>document.getElementById(sliderId)).value;
 }
@@ -769,7 +965,8 @@ function showRangeValue(prepend: string, sliderId: string, inputId: string) {
 function startApp() {
 	let app = new App(<HTMLCanvasElement>document.getElementById('canvas'));
 
-	app.loadTexture('./img/earth.png');
+	app.loadTexture('./img/earth.png', 0);
+	app.loadTexture('./img/clouds.png', 1);
 
 	let drawMode = <HTMLSelectElement>document.getElementById('drawMode');
 	drawMode.addEventListener('change', (e) => app.SetDrawMode((<HTMLOptionElement>drawMode.options[drawMode.selectedIndex]).value));
@@ -801,7 +998,5 @@ function startApp() {
 }
 
 (() => {
-	let texture = new Image();
-	texture.src = './img/earth.png';
-	texture.onload = startApp;
+	startApp();
 })();
