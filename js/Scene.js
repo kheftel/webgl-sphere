@@ -16,6 +16,11 @@ define(["require", "exports", "./Mesh", "./Matrix"], function (require, exports,
             this._meshes = [];
             this.drawMode = this._gl.TRIANGLES;
             this._defaultShader = Scene.createShaderProgram(this._gl);
+            this._uniforms = {
+                'uloc_ambientLight': [0.3, 0.3, 0.3],
+                'uloc_directionalLight': [1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3)],
+                'uloc_directionalLightColor': [1, 1, 1],
+            };
         }
         //
         // Initialize a texture and load an image.
@@ -89,7 +94,7 @@ define(["require", "exports", "./Mesh", "./Matrix"], function (require, exports,
             return false;
         };
         Scene.createVertexShader = function (gl) {
-            var vertCode = "\n\t\t\tattribute vec3 a_position;\n\t\t\tattribute vec3 a_normal;\n\t\t\tattribute vec2 a_uv;\n\n\t\t\tuniform mat4 u_Projection;\n\t\t\tuniform mat4 u_View;\n\t\t\tuniform mat4 u_Model;\n\t\t\tuniform mat4 u_NormalMatrix;\n\n\t\t\tuniform vec3 u_ambientLight;\n\t\t\tuniform vec3 u_directionalLight;\n\t\t\tuniform vec3 u_directionalLightColor;\n\n\t\t\tvarying highp vec2 v_TextureCoord;\n\t\t\tvarying highp vec3 v_Lighting;\n\n\t\t\tvoid main(void) {\n\t\t\t\t// Output tex coord to frag shader.\n\t\t\t\tv_TextureCoord = a_uv;\n\t\t\t\t\n\t\t\t\t// set position of vertex\n\t\t\t\tgl_Position = u_Projection * u_View * u_Model * vec4(a_position, 1.);\n\t\t\t\tgl_PointSize = 4.0;\n\n\t\t\t\t// Apply lighting effect\n\t\t\t\t// highp vec3 u_ambientLight = vec3(0.3, 0.3, 0.3);\n\t\t\t\t// highp vec3 u_directionalLightColor = vec3(1, 1, 1);\n\t\t\t\t// highp vec3 u_directionalLight = normalize(vec3(0.85, 0.8, 0.75));\n\t\t\t\thighp vec4 transformedNormal = u_NormalMatrix * vec4(a_normal, 1.0);\n\t\t\t\thighp float directional = max(dot(transformedNormal.xyz, u_directionalLight), 0.0);\n\t\t\t\tv_Lighting = u_ambientLight + (u_directionalLightColor * directional);\t\t\t\t\n\t\t\t}";
+            var vertCode = "\n\t\t\tattribute vec3 a_position;\n\t\t\tattribute vec3 a_normal;\n\t\t\tattribute vec2 a_uv;\n\n\t\t\tuniform mat4 u_Projection;\n\t\t\tuniform mat4 u_View;\n\t\t\tuniform mat4 u_Model;\n\t\t\tuniform mat4 u_NormalMatrix;\n\n            uniform vec3 u_fullyLit;\n\t\t\tuniform vec3 u_ambientLight;\n\t\t\tuniform vec3 u_directionalLight;\n\t\t\tuniform vec3 u_directionalLightColor;\n\n\t\t\tvarying highp vec2 v_TextureCoord;\n\t\t\tvarying highp vec3 v_Lighting;\n\n\t\t\tvoid main(void) {\n\t\t\t\t// Output tex coord to frag shader.\n\t\t\t\tv_TextureCoord = a_uv;\n\t\t\t\t\n\t\t\t\t// set position of vertex\n\t\t\t\tgl_Position = u_Projection * u_View * u_Model * vec4(a_position, 1.);\n\t\t\t\tgl_PointSize = 4.0;\n\n\t\t\t\t// Apply lighting effect\n\t\t\t\thighp vec4 transformedNormal = u_NormalMatrix * vec4(a_normal, 1.0);\n\t\t\t\thighp float directional = max(dot(transformedNormal.xyz, u_directionalLight), 0.0);\n\t\t\t\tv_Lighting = max(u_fullyLit, u_ambientLight + (u_directionalLightColor * directional));\n\t\t\t}";
             var vertShader = gl.createShader(gl.VERTEX_SHADER);
             gl.shaderSource(vertShader, vertCode);
             gl.compileShader(vertShader);
@@ -102,7 +107,7 @@ define(["require", "exports", "./Mesh", "./Matrix"], function (require, exports,
             return vertShader;
         };
         Scene.createFragmentShader = function (gl) {
-            var fragCode = "\n\t\t\tvarying highp vec2 v_TextureCoord;\n\t\t\tvarying highp vec3 v_Lighting;\n\n\t\t\tuniform sampler2D u_Sampler;\n\n\t\t\tvoid main(void) {\n\t\t\t\thighp vec4 texelColor = texture2D(u_Sampler, v_TextureCoord); //vec4(vColor.rgb, 1.);\n\t\t\t\tgl_FragColor = vec4(texelColor.rgb * v_Lighting * texelColor.a, texelColor.a);\n\t\t\t}";
+            var fragCode = "\n\t\t\tvarying highp vec2 v_TextureCoord;\n\t\t\tvarying highp vec3 v_Lighting;\n\n\t\t\tuniform sampler2D u_sampler;\n\n\t\t\tvoid main(void) {\n\t\t\t\thighp vec4 texelColor = texture2D(u_sampler, v_TextureCoord); //vec4(vColor.rgb, 1.);\n\t\t\t\tgl_FragColor = vec4(texelColor.rgb * v_Lighting * texelColor.a, texelColor.a);\n\t\t\t}";
             var fragShader = gl.createShader(gl.FRAGMENT_SHADER);
             gl.shaderSource(fragShader, fragCode);
             gl.compileShader(fragShader);
@@ -132,14 +137,17 @@ define(["require", "exports", "./Mesh", "./Matrix"], function (require, exports,
             var uloc_ambientLight = gl.getUniformLocation(shaderProgram, "u_ambientLight");
             var uloc_directionalLight = gl.getUniformLocation(shaderProgram, "u_directionalLight");
             var uloc_directionalLightColor = gl.getUniformLocation(shaderProgram, "u_directionalLightColor");
-            gl.uniform3f(uloc_ambientLight, 0.3, 0.3, 0.3);
-            gl.uniform3f(uloc_directionalLight, 1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3));
-            gl.uniform3f(uloc_directionalLightColor, 1, 1, 1);
+            // gl.uniform3f(uloc_ambientLight, 0.3, 0.3, 0.3);
+            // gl.uniform3f(uloc_directionalLight, 1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3));
+            // gl.uniform3f(uloc_directionalLightColor, 1, 1, 1);
             return {
                 uloc_Projection: uloc_Projection,
                 uloc_View: uloc_View,
                 uloc_Model: uloc_Model,
                 uloc_Normal: uloc_Noraml,
+                uloc_ambientLight: uloc_ambientLight,
+                uloc_directionalLight: uloc_directionalLight,
+                uloc_directionalLightColor: uloc_directionalLightColor,
                 shaderProgram: shaderProgram
             };
         };
@@ -179,10 +187,16 @@ define(["require", "exports", "./Mesh", "./Matrix"], function (require, exports,
             gl.clearDepth(1.0);
             gl.viewport(0.0, 0.0, this._canvas.clientWidth, this._canvas.clientHeight);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            var u;
             for (var i = 0; i < this._meshes.length; i++) {
                 var mesh = this._meshes[i];
-                // rendering
                 var shader = mesh.shader;
+                u = this._uniforms['uloc_ambientLight'];
+                gl.uniform3f(shader.uloc_ambientLight, u[0], u[1], u[2]);
+                u = this._uniforms['uloc_directionalLight'];
+                gl.uniform3f(shader.uloc_directionalLight, u[0], u[1], u[2]);
+                u = this._uniforms['uloc_directionalLightColor'];
+                gl.uniform3f(shader.uloc_directionalLightColor, u[0], u[1], u[2]);
                 gl.useProgram(shader.shaderProgram);
                 if (!mesh.is2D) {
                     gl.enable(gl.DEPTH_TEST);

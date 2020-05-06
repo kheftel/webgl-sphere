@@ -69,6 +69,7 @@ class App {
 		backdrop.uvs = q.getUVs();
 		backdrop.indices = q.getIndices();
 		backdrop.texture = this.scene.getTexture('stars');
+		backdrop.isFullyLit = false;
 		backdrop.prepBuffers();
 		Matrix.scale(backdrop.modelMatrix, backdrop.modelMatrix, [1, 1, 0]);
 		Matrix.translate(backdrop.modelMatrix, backdrop.modelMatrix, [1, 1, 0]);

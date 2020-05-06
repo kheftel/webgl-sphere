@@ -8,6 +8,7 @@ define(["require", "exports", "./Matrix"], function (require, exports, Matrix_1)
             this.modelMatrix = Matrix_1.default.create();
             this.normalMatrix = Matrix_1.default.create();
             this.is2D = false;
+            this.isFullyLit = false;
         }
         Mesh.prototype.prepBuffers = function () {
             var gl = this.gl;
@@ -26,7 +27,8 @@ define(["require", "exports", "./Matrix"], function (require, exports, Matrix_1)
             this.indexBuffer = gl.createBuffer();
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
             gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(this.indices), gl.STATIC_DRAW);
-            this.uloc_sampler = gl.getUniformLocation(this.shader.shaderProgram, 'u_Sampler');
+            this.uloc_sampler = gl.getUniformLocation(this.shader.shaderProgram, 'u_sampler');
+            this.uloc_fullyLit = gl.getUniformLocation(this.shader.shaderProgram, 'u_fullyLit');
         };
         Mesh.prototype.deleteBuffers = function () {
             var gl = this.gl;
@@ -57,6 +59,12 @@ define(["require", "exports", "./Matrix"], function (require, exports, Matrix_1)
             gl.uniform1i(this.uloc_sampler, 0);
             // use our index buffer
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
+            if (this.isFullyLit) {
+                gl.uniform3f(this.uloc_fullyLit, 1, 1, 1);
+            }
+            else {
+                gl.uniform3f(this.uloc_fullyLit, 0, 0, 0);
+            }
             // set blend mode
             if (this.isOpaque) {
                 gl.disable(gl.BLEND);

@@ -2,26 +2,35 @@ import Matrix from "./Matrix";
 import IShaderProgram from "./IShaderProgram";
 
 export default class Mesh {
-	public gl:WebGLRenderingContext;
+	public gl: WebGLRenderingContext;
+
 	public vertices: number[];
 	public normals: number[];
 	public uvs: number[];
 	public indices: number[];
+
 	public texture: WebGLTexture;
 	public vertexBuffer: WebGLBuffer;
 	public normalBuffer: WebGLBuffer;
 	public uvBuffer: WebGLBuffer;
 	public indexBuffer: WebGLBuffer;
+
 	public modelMatrix: Float32Array;
 	public normalMatrix: Float32Array;
+
 	public shader: IShaderProgram;
+
 	public isOpaque: Boolean;
-	public is2D:boolean;
-	public name:string;
-	public aloc_position:number;
-	public aloc_normal:number;
-	public aloc_uv:number;
-	public uloc_sampler:WebGLUniformLocation;
+	public is2D: boolean;
+	public isFullyLit: boolean;
+
+	public name: string;
+
+	public aloc_position: number;
+	public aloc_normal: number;
+	public aloc_uv: number;
+	public uloc_sampler: WebGLUniformLocation;
+	public uloc_fullyLit: WebGLUniformLocation;
 
 	public prepBuffers() {
 		var gl = this.gl;
@@ -44,7 +53,8 @@ export default class Mesh {
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(this.indices), gl.STATIC_DRAW);
 
-		this.uloc_sampler = gl.getUniformLocation(this.shader.shaderProgram, 'u_Sampler');
+		this.uloc_sampler = gl.getUniformLocation(this.shader.shaderProgram, 'u_sampler');
+		this.uloc_fullyLit = gl.getUniformLocation(this.shader.shaderProgram, 'u_fullyLit');		
 	}
 
 	public deleteBuffers() {
@@ -83,6 +93,13 @@ export default class Mesh {
 		// use our index buffer
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
 
+		if(this.isFullyLit) {
+			gl.uniform3f(this.uloc_fullyLit, 1, 1, 1);
+		}
+		else {
+			gl.uniform3f(this.uloc_fullyLit, 0, 0, 0);
+		}
+
 		// set blend mode
 		if (this.isOpaque) {
 			gl.disable(gl.BLEND);
@@ -93,9 +110,9 @@ export default class Mesh {
 		}
 	}
 
-	public draw(mode:any = null) {
+	public draw(mode: any = null) {
 		var gl = this.gl;
-		if(mode === null) mode = gl.TRIANGLES;
+		if (mode === null) mode = gl.TRIANGLES;
 		gl.drawElements(mode, this.indices.length, gl.UNSIGNED_SHORT, 0);
 	}
 
@@ -104,11 +121,12 @@ export default class Mesh {
 		Matrix.transpose(this.normalMatrix, this.normalMatrix);
 	}
 
-	constructor(name:string, gl:WebGLRenderingContext) {
+	constructor(name: string, gl: WebGLRenderingContext) {
 		this.gl = gl;
 		this.name = name;
 		this.modelMatrix = Matrix.create();
 		this.normalMatrix = Matrix.create();
 		this.is2D = false;
+		this.isFullyLit = false;
 	}
 }

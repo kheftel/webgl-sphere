@@ -15,10 +15,14 @@ export default class Scene {
     public projectionMatrix: Float32Array;
     public viewMatrix: Float32Array;
     public orthoMatrix: Float32Array;
-    public drawMode:number;
+    public drawMode: number;
 
     private _time_old: number;
     private _identity: Float32Array;
+
+    public _uniforms: {
+        [key: string]: number[]
+    };
 
     constructor(canvas: HTMLCanvasElement) {
         this._canvas = canvas;
@@ -39,6 +43,12 @@ export default class Scene {
         this.drawMode = this._gl.TRIANGLES;
 
         this._defaultShader = Scene.createShaderProgram(this._gl);
+
+        this._uniforms = {
+            'uloc_ambientLight': [0.3, 0.3, 0.3],
+            'uloc_directionalLight': [1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3)],
+            'uloc_directionalLightColor': [1, 1, 1],
+        };
     }
 
     //
@@ -92,7 +102,7 @@ export default class Scene {
         this._textures[key] = texture;
     }
 
-    public getTexture(key:string) {
+    public getTexture(key: string) {
         return this._textures[key];
     }
 
@@ -132,6 +142,7 @@ export default class Scene {
 			uniform mat4 u_Model;
 			uniform mat4 u_NormalMatrix;
 
+            uniform vec3 u_fullyLit;
 			uniform vec3 u_ambientLight;
 			uniform vec3 u_directionalLight;
 			uniform vec3 u_directionalLightColor;
@@ -148,12 +159,9 @@ export default class Scene {
 				gl_PointSize = 4.0;
 
 				// Apply lighting effect
-				// highp vec3 u_ambientLight = vec3(0.3, 0.3, 0.3);
-				// highp vec3 u_directionalLightColor = vec3(1, 1, 1);
-				// highp vec3 u_directionalLight = normalize(vec3(0.85, 0.8, 0.75));
 				highp vec4 transformedNormal = u_NormalMatrix * vec4(a_normal, 1.0);
 				highp float directional = max(dot(transformedNormal.xyz, u_directionalLight), 0.0);
-				v_Lighting = u_ambientLight + (u_directionalLightColor * directional);				
+				v_Lighting = max(u_fullyLit, u_ambientLight + (u_directionalLightColor * directional));
 			}`;
 
         var vertShader = gl.createShader(gl.VERTEX_SHADER);
@@ -176,10 +184,10 @@ export default class Scene {
 			varying highp vec2 v_TextureCoord;
 			varying highp vec3 v_Lighting;
 
-			uniform sampler2D u_Sampler;
+			uniform sampler2D u_sampler;
 
 			void main(void) {
-				highp vec4 texelColor = texture2D(u_Sampler, v_TextureCoord); //vec4(vColor.rgb, 1.);
+				highp vec4 texelColor = texture2D(u_sampler, v_TextureCoord); //vec4(vColor.rgb, 1.);
 				gl_FragColor = vec4(texelColor.rgb * v_Lighting * texelColor.a, texelColor.a);
 			}`;
 
@@ -221,44 +229,47 @@ export default class Scene {
         var uloc_ambientLight = gl.getUniformLocation(shaderProgram, "u_ambientLight");
         var uloc_directionalLight = gl.getUniformLocation(shaderProgram, "u_directionalLight");
         var uloc_directionalLightColor = gl.getUniformLocation(shaderProgram, "u_directionalLightColor");
-        gl.uniform3f(uloc_ambientLight, 0.3, 0.3, 0.3);
-        gl.uniform3f(uloc_directionalLight, 1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3));
-        gl.uniform3f(uloc_directionalLightColor, 1, 1, 1);
+        // gl.uniform3f(uloc_ambientLight, 0.3, 0.3, 0.3);
+        // gl.uniform3f(uloc_directionalLight, 1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3));
+        // gl.uniform3f(uloc_directionalLightColor, 1, 1, 1);
 
         return {
             uloc_Projection: uloc_Projection,
             uloc_View: uloc_View,
             uloc_Model: uloc_Model,
             uloc_Normal: uloc_Noraml,
+            uloc_ambientLight: uloc_ambientLight,
+            uloc_directionalLight: uloc_directionalLight,
+            uloc_directionalLightColor: uloc_directionalLightColor,
             shaderProgram: shaderProgram
         };
     }
 
-    public createMesh(name:string, add:boolean = true):Mesh {
+    public createMesh(name: string, add: boolean = true): Mesh {
         var m = new Mesh(name, this._gl);
         m.shader = this._defaultShader;
-        if(add)
+        if (add)
             this.addMesh(m);
         return m;
     }
 
-    public addMesh(m:Mesh) {
-        if(this._meshes.indexOf(m) == -1)
+    public addMesh(m: Mesh) {
+        if (this._meshes.indexOf(m) == -1)
             this._meshes.push(m);
         else
             console.log(`mesh ${m.name} already added to scene`);
     }
 
-    public destroyMesh(m:Mesh) {
+    public destroyMesh(m: Mesh) {
         var index = this._meshes.indexOf(m);
-        if(index != -1){
+        if (index != -1) {
             this._meshes.splice(index, 1);
         }
         m.deleteBuffers();
     }
 
     public destroyAllMeshes() {
-        for(var i = 0; i < this._meshes.length; i++) {
+        for (var i = 0; i < this._meshes.length; i++) {
             this._meshes[i].deleteBuffers();
         }
         this._meshes = [];
@@ -276,11 +287,19 @@ export default class Scene {
         gl.viewport(0.0, 0.0, this._canvas.clientWidth, this._canvas.clientHeight);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
+        var u;
+
         for (var i = 0; i < this._meshes.length; i++) {
             var mesh = this._meshes[i];
 
-            // rendering
             var shader = mesh.shader;
+            u = this._uniforms['uloc_ambientLight'];
+            gl.uniform3f(shader.uloc_ambientLight, u[0], u[1], u[2]);
+            u = this._uniforms['uloc_directionalLight'];
+            gl.uniform3f(shader.uloc_directionalLight, u[0], u[1], u[2]);
+            u = this._uniforms['uloc_directionalLightColor'];
+            gl.uniform3f(shader.uloc_directionalLightColor, u[0], u[1], u[2]);
+
             gl.useProgram(shader.shaderProgram);
 
             if (!mesh.is2D) {

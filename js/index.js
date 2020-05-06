@@ -38,6 +38,7 @@ define(["require", "exports", "./Sphere", "./Matrix", "./Quad", "./Scene"], func
             backdrop.uvs = q.getUVs();
             backdrop.indices = q.getIndices();
             backdrop.texture = this.scene.getTexture('stars');
+            backdrop.isFullyLit = false;
             backdrop.prepBuffers();
             Matrix_1.default.scale(backdrop.modelMatrix, backdrop.modelMatrix, [1, 1, 0]);
             Matrix_1.default.translate(backdrop.modelMatrix, backdrop.modelMatrix, [1, 1, 0]);
