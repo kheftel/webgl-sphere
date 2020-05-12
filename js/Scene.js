@@ -1,17 +1,30 @@
-define(["require", "exports", "./Mesh", "./Matrix"], function (require, exports, Mesh_1, Matrix_1) {
+define(["require", "exports", "./m4", "./Mesh", "./LiteEvent"], function (require, exports, m4_1, Mesh_1, LiteEvent_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var Scene = /** @class */ (function () {
-        function Scene(canvas) {
+        function Scene(canvas, fovRad, zMin, zMax, cameraPosition, cameraTarget) {
+            // events
+            this._onCanvasSizeChange = new LiteEvent_1.default();
             this._canvas = canvas;
             this._gl = canvas.getContext('webgl');
             this._gl.viewport(0, 0, canvas.width, canvas.height);
+            this._fov = fovRad;
+            this._zMin = zMin;
+            this._zMax = zMax;
+            this.cameraPosition = cameraPosition ? cameraPosition : [0, 0, 0];
+            this.cameraTarget = cameraTarget ? cameraTarget : [0, 0, -10];
             this._canvas.setAttribute('width', this._canvas.clientWidth.toString());
             this._canvas.setAttribute('height', this._canvas.clientHeight.toString());
-            this.projectionMatrix = Matrix_1.default.perspectiveProjection(45, this._canvas.width / this._canvas.height, 1, 100);
-            this.viewMatrix = Matrix_1.default.create();
-            this.orthoMatrix = Matrix_1.default.orthoProjection(2, 2, 1000);
-            this._identity = Matrix_1.default.create();
+            this._identity = m4_1.default.identity();
+            // this.projectionMatrix = m4.perspective(fov * 2 * Math.PI / 180, this._canvas.clientWidth / this._canvas.clientHeight, zMin, zMax);
+            this.projectionMatrix = m4_1.default.perspectiveHorizontal(this._fov, this._canvas.clientWidth / this._canvas.clientHeight, this._zMin, this._zMax);
+            // Matrix.perspectiveProjection(this.projectionMatrix, fov, this._canvas.width / this._canvas.height, zMin, zMax);
+            this.viewMatrix = m4_1.default.identity();
+            // this.orthoMatrix = m4.identity();
+            this.orthoMatrix = m4_1.default.orthographicCanvas(canvas.clientWidth, canvas.clientHeight, this._zMax);
+            // Matrix.orthoProjection(this.orthoMatrix, canvas.width, canvas.height, zMax);
+            console.log('projection matrix: ');
+            console.dir(this.projectionMatrix);
             this._textures = {};
             this._meshes = [];
             this.drawMode = this._gl.TRIANGLES;
@@ -22,6 +35,40 @@ define(["require", "exports", "./Mesh", "./Matrix"], function (require, exports,
                 'uloc_directionalLightColor': [1, 1, 1],
             };
         }
+        Object.defineProperty(Scene.prototype, "eventCanvasSizeChange", {
+            get: function () { return this._onCanvasSizeChange.expose(); },
+            enumerable: true,
+            configurable: true
+        });
+        Object.defineProperty(Scene.prototype, "fov", {
+            get: function () { return this._fov; },
+            enumerable: true,
+            configurable: true
+        });
+        Object.defineProperty(Scene.prototype, "zMin", {
+            get: function () { return this._zMin; },
+            enumerable: true,
+            configurable: true
+        });
+        Object.defineProperty(Scene.prototype, "zMax", {
+            get: function () { return this._zMax; },
+            enumerable: true,
+            configurable: true
+        });
+        Object.defineProperty(Scene.prototype, "canvasWidth", {
+            get: function () {
+                return this._canvas.width;
+            },
+            enumerable: true,
+            configurable: true
+        });
+        Object.defineProperty(Scene.prototype, "canvasHeight", {
+            get: function () {
+                return this._canvas.height;
+            },
+            enumerable: true,
+            configurable: true
+        });
         //
         // Initialize a texture and load an image.
         // When the image finished loading copy it into the texture.
@@ -54,6 +101,8 @@ define(["require", "exports", "./Mesh", "./Matrix"], function (require, exports,
                 if (Scene.isPowerOf2(image.width) && Scene.isPowerOf2(image.height)) {
                     // Yes, it's a power of 2. Generate mips.
                     gl.generateMipmap(gl.TEXTURE_2D);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
                 }
                 else {
                     // No, it's not a power of 2. Turn off mips and set
@@ -63,6 +112,7 @@ define(["require", "exports", "./Mesh", "./Matrix"], function (require, exports,
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
                 }
             };
+            image.crossOrigin = 'anonymous';
             image.src = url;
             this._textures[key] = texture;
         };
@@ -89,6 +139,10 @@ define(["require", "exports", "./Mesh", "./Matrix"], function (require, exports,
             if (canvas.width !== width || canvas.height !== height) {
                 canvas.width = width;
                 canvas.height = height;
+                // this.projectionMatrix = m4.perspective(this._fov * 2 * Math.PI / 180, this._canvas.clientWidth / this._canvas.clientHeight, this._zMin, this._zMax);
+                m4_1.default.perspectiveHorizontal(this._fov, this._canvas.clientWidth / this._canvas.clientHeight, this._zMin, this._zMax, this.projectionMatrix);
+                this.viewMatrix = m4_1.default.identity();
+                m4_1.default.orthographicCanvas(canvas.clientWidth, canvas.clientHeight, this._zMax, this.orthoMatrix);
                 return true;
             }
             return false;
@@ -178,18 +232,40 @@ define(["require", "exports", "./Mesh", "./Matrix"], function (require, exports,
             }
             this._meshes = [];
         };
+        Scene.prototype.getMesh = function (i) {
+            if (i >= 0 && i < this._meshes.length)
+                return this._meshes[i];
+            return null;
+        };
+        Scene.prototype.getMeshByName = function (name) {
+            for (var i = 0; i < this._meshes.length; i++) {
+                if (this._meshes[i].name == name)
+                    return this._meshes[i];
+            }
+            return null;
+        };
         Scene.prototype.drawScene = function (time) {
             if (time === void 0) { time = 0; }
             var dt = time - this._time_old;
             this._time_old = time;
             var gl = this._gl;
-            this._resizeCanvasToDisplaySize();
+            if (this._resizeCanvasToDisplaySize()) {
+                this._onCanvasSizeChange.trigger({ width: this._canvas.width, height: this._canvas.height });
+            }
             gl.clearDepth(1.0);
             gl.viewport(0.0, 0.0, this._canvas.clientWidth, this._canvas.clientHeight);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            var up = [0, 1, 0];
+            // Compute the camera's matrix using look at.
+            var cameraMatrix = m4_1.default.lookAt(this.cameraPosition, this.cameraTarget, up);
+            // Make a view matrix from the camera matrix
+            var viewMatrix = m4_1.default.inverse(cameraMatrix);
+            m4_1.default.copy(viewMatrix, this.viewMatrix);
             var u;
             for (var i = 0; i < this._meshes.length; i++) {
                 var mesh = this._meshes[i];
+                if (!mesh.isVisible)
+                    continue;
                 var shader = mesh.shader;
                 u = this._uniforms['uloc_ambientLight'];
                 gl.uniform3f(shader.uloc_ambientLight, u[0], u[1], u[2]);

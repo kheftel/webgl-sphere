@@ -3,8 +3,9 @@
 import Mesh from "./Mesh";
 import Sphere from "./Sphere";
 import Matrix from "./Matrix";
+import m4 from "./m4";
 import IShaderProgram from "./IShaderProgram";
-import Quad from "./Quad";
+import Quad2D from "./Quad2D";
 import Scene from "./Scene";
 
 class App {
@@ -34,8 +35,8 @@ class App {
 			{ sectors: 72, stacks: 36 },
 		];
 
-	constructor(canvas: HTMLCanvasElement) {
-		this.scene = new Scene(canvas);
+	constructor(canvas: HTMLCanvasElement, fovRad:number, zMin:number, zMax:number) {
+		this.scene = new Scene(canvas, fovRad, zMin, zMax);
 		this.canvas = canvas;
 		var gl = this.scene._gl;
 
@@ -48,8 +49,8 @@ class App {
 			Rotation:
 			{
 				X: 0.0000,
-				Y: 0.0001,
-				Z: 0
+				Y: 0.0000,
+				Z: 0.0001
 			}
 		};
 	}
@@ -60,7 +61,10 @@ class App {
 
 		// create meshes for the scene
 
-		var q = new Quad(2, 2);
+		// cover the canvas no matter what, keep square
+		// not quite centered, but it's ok
+		var largeDimension = Math.max(this.scene.canvasWidth, this.scene.canvasHeight)
+		var q = new Quad2D(largeDimension, largeDimension);
 		var backdrop = this.scene.createMesh('backdrop');
 		backdrop.isOpaque = true;
 		backdrop.is2D = true;
@@ -71,9 +75,6 @@ class App {
 		backdrop.texture = this.scene.getTexture('stars');
 		backdrop.isFullyLit = false;
 		backdrop.prepBuffers();
-		Matrix.scale(backdrop.modelMatrix, backdrop.modelMatrix, [1, 1, 0]);
-		Matrix.translate(backdrop.modelMatrix, backdrop.modelMatrix, [1, 1, 0]);
-		backdrop.updateNormalMatrix();
 
 		var radius = 7.0;
 		var sphere = new Sphere(radius, this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
@@ -87,9 +88,10 @@ class App {
 		earth.indices = sphere.getIndices();
 		earth.prepBuffers();
 		earth.texture = this.scene.getTexture('earth');
-		Matrix.rotateX(earth.modelMatrix, 270 * Math.PI / 180);
-		Matrix.rotateY(earth.modelMatrix, 170 * Math.PI / 180);
-		earth.updateNormalMatrix();
+		earth.transform.translation[2] = 0;
+		earth.transform.rotation[0] = m4.deg2rad(-90);
+		earth.transform.rotation[2] = m4.deg2rad(170);
+		earth.updateTransform();
 
 		var sphere2 = new Sphere(radius * 1.02, this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
 		var clouds = this.scene.createMesh('clouds');
@@ -100,10 +102,9 @@ class App {
 		clouds.indices = sphere2.getIndices();
 		clouds.prepBuffers();
 		clouds.texture = this.scene.getTexture('clouds');
-		Matrix.rotateX(clouds.modelMatrix, 270 * Math.PI / 180);
-		Matrix.rotateY(clouds.modelMatrix, 170 * Math.PI / 180);
-		Matrix.translate(clouds.modelMatrix, clouds.modelMatrix, [0, 0, 0]);
-		clouds.updateNormalMatrix();
+		clouds.transform.scale[0] = clouds.transform.scale[1] = clouds.transform.scale[2] = 1.02;
+		clouds.transform.rotation[0] = m4.deg2rad(-90);
+		clouds.transform.rotation[2] = m4.deg2rad(170);
 
 		return {
 			meshes: [backdrop, earth, clouds]
@@ -121,24 +122,39 @@ class App {
 			var dt = time - time_old;
 			time_old = time;
 
-			// adjust zoom level
-			if (Math.abs(this._config.ZoomLevel - zoomLevel_old) >= 0.01) {
-				view_matrix[14] = view_matrix[14] + (zoomLevel_old * -1) + this._config.ZoomLevel;
-				zoomLevel_old = this._config.ZoomLevel;
-				console.log(this._config.ZoomLevel);
-			}
+			this.scene.cameraPosition[2] = -this._config.ZoomLevel;
 
-			// update mesh
-			this.scene._meshes.forEach(mesh => {
-				if (mesh.name != 'backdrop') {
-					for (var axis in rotThetas) {
-						var theta = rotThetas[axis];
-						if (theta > 0.0 || theta < 0.0) {
-							(<any>Matrix)[`rotate${axis}`](mesh.modelMatrix, dt * theta);
-						}
+			// adjust zoom level
+			// if (Math.abs(this._config.ZoomLevel - zoomLevel_old) >= 0.01) {
+			// 	view_matrix[14] = view_matrix[14] + (zoomLevel_old * -1) + this._config.ZoomLevel;
+			// 	zoomLevel_old = this._config.ZoomLevel;
+			// 	console.log(this._config.ZoomLevel);
+			// }
+
+			// update meshes
+			var earth = this.scene.getMeshByName('earth');
+			var clouds = this.scene.getMeshByName('clouds');
+			for (var axis in rotThetas) {
+				var theta = rotThetas[axis];
+				if (theta > 0.0 || theta < 0.0) {
+					var index = 0;
+					switch (axis) {
+						case 'X':
+							index = 0;
+							break;
+						case 'Y':
+							index = 1;
+							break;
+						case 'Z':
+							index = 2;
+							break;
+
 					}
+					earth.transform.rotation[index] += dt * theta;
+					if(clouds) clouds.transform.rotation[index] = earth.transform.rotation[index];
+					// (<any>Matrix)[`rotate${axis}`](mesh.modelMatrix, dt * theta);
 				}
-			});
+			}
 
 			this.scene.drawScene(time);
 
@@ -198,7 +214,7 @@ function showRangeValue(prepend: string, sliderId: string, inputId: string) {
 }
 
 function startApp() {
-	let app = new App(<HTMLCanvasElement>document.getElementById('canvas'));
+	let app = new App(<HTMLCanvasElement>document.getElementById('canvas'), m4.deg2rad(45), 0.1, 1000);
 
 	let scene = app.scene;
 

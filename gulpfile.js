@@ -11,7 +11,7 @@ gulp.task('default', function () {
         server: true
     });
 
-    gulp.watch('js/index.js', ['watch']);
+    gulp.watch('js/**/*.js', ['watch']);
     gulp.watch('index.html', ['watch']);
     gulp.watch('css/style.css', ['watch']);
 });

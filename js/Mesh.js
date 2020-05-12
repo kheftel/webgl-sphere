@@ -1,14 +1,16 @@
-define(["require", "exports", "./Matrix"], function (require, exports, Matrix_1) {
+define(["require", "exports", "./TRS", "./m4"], function (require, exports, TRS_1, m4_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var Mesh = /** @class */ (function () {
         function Mesh(name, gl) {
             this.gl = gl;
             this.name = name;
-            this.modelMatrix = Matrix_1.default.create();
-            this.normalMatrix = Matrix_1.default.create();
+            this.modelMatrix = m4_1.default.identity();
+            this.normalMatrix = m4_1.default.identity();
             this.is2D = false;
             this.isFullyLit = false;
+            this.transform = new TRS_1.default();
+            this.isVisible = true;
         }
         Mesh.prototype.prepBuffers = function () {
             var gl = this.gl;
@@ -39,9 +41,41 @@ define(["require", "exports", "./Matrix"], function (require, exports, Matrix_1)
             gl.deleteBuffer(this.uvBuffer);
             gl.deleteBuffer(this.indexBuffer);
         };
+        // public updateWorldMatrix(parentWorldMatrix?: Float32Array) {
+        //     var transform = this.transform;
+        //     if (transform) {
+        //         transform.getMatrix(this.localMatrix);
+        //     }
+        //     if (parentWorldMatrix) {
+        //         // a matrix was passed in so do the math
+        //         m4.multiply(parentWorldMatrix, this.localMatrix, this.worldMatrix);
+        //     } else {
+        //         // no matrix was passed in so just copy local to world
+        //         m4.copy(this.localMatrix, this.worldMatrix);
+        //     }
+        //     // now process all the children
+        //     var worldMatrix = this.worldMatrix;
+        //     this.children.forEach(function (child) {
+        //         child.updateWorldMatrix(worldMatrix);
+        //     });
+        // }
+        // public setParent(parent: Mesh) {
+        //     // remove us from our parent
+        //     if (this.parent) {
+        //         var ndx = this.parent.children.indexOf(this);
+        //         if (ndx >= 0) {
+        //             this.parent.children.splice(ndx, 1);
+        //         }
+        //     }
+        //     // Add us to our new parent
+        //     if (parent) {
+        //         parent.children.push(this);
+        //     }
+        //     this.parent = parent;
+        // };
         Mesh.prototype.beforeDraw = function () {
             var gl = this.gl;
-            this.updateNormalMatrix();
+            this.updateTransform();
             gl.uniformMatrix4fv(this.shader.uloc_Model, false, this.modelMatrix);
             gl.uniformMatrix4fv(this.shader.uloc_Normal, false, this.normalMatrix);
             gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
@@ -81,9 +115,15 @@ define(["require", "exports", "./Matrix"], function (require, exports, Matrix_1)
                 mode = gl.TRIANGLES;
             gl.drawElements(mode, this.indices.length, gl.UNSIGNED_SHORT, 0);
         };
-        Mesh.prototype.updateNormalMatrix = function () {
-            Matrix_1.default.invert(this.normalMatrix, this.modelMatrix);
-            Matrix_1.default.transpose(this.normalMatrix, this.normalMatrix);
+        Mesh.prototype.updateTransform = function () {
+            // copy transforms into model matrix
+            this.transform.getMatrix(this.modelMatrix);
+            // NOTE: not all of the m4 operations are safe to pass self as dst.....
+            // recompute normal matrix
+            this.normalMatrix = m4_1.default.inverse(this.modelMatrix);
+            this.normalMatrix = m4_1.default.transpose(this.normalMatrix);
+            // Matrix.invert(this.normalMatrix, this.modelMatrix);
+            // Matrix.transpose(this.normalMatrix, this.normalMatrix);
         };
         return Mesh;
     }());

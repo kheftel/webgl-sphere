@@ -1,10 +1,15 @@
+import m4 from './m4';
 import Mesh from "./Mesh";
 import Sphere from "./Sphere";
-import Matrix from "./Matrix";
 import IShaderProgram from "./IShaderProgram";
 import Quad from "./Quad";
+import LiteEvent from "./LiteEvent";
 
 export default class Scene {
+    // events
+    private readonly _onCanvasSizeChange = new LiteEvent<{ width: number, height: number }>();
+    public get eventCanvasSizeChange() { return this._onCanvasSizeChange.expose(); }
+
     public _canvas: HTMLCanvasElement;
     public _gl: WebGLRenderingContext;
     public _defaultShader: IShaderProgram;
@@ -24,18 +29,41 @@ export default class Scene {
         [key: string]: number[]
     };
 
-    constructor(canvas: HTMLCanvasElement) {
+    public cameraPosition:number[];
+    public cameraTarget:number[];
+
+    // properties
+    private _fov: number;
+    private _zMin: number;
+    private _zMax: number;
+    public get fov() { return this._fov; }
+    public get zMin() { return this._zMin; }
+    public get zMax() { return this._zMax; }
+
+    constructor(canvas: HTMLCanvasElement, fovRad: number, zMin: number, zMax: number, cameraPosition?:number[], cameraTarget?:number[]) {
         this._canvas = canvas;
         this._gl = <WebGLRenderingContext>canvas.getContext('webgl');
         this._gl.viewport(0, 0, canvas.width, canvas.height);
+        this._fov = fovRad;
+        this._zMin = zMin;
+        this._zMax = zMax;
+
+        this.cameraPosition = cameraPosition ? cameraPosition : [0, 0, 0];
+        this.cameraTarget = cameraTarget ? cameraTarget : [0, 0, -10];
 
         this._canvas.setAttribute('width', this._canvas.clientWidth.toString());
         this._canvas.setAttribute('height', this._canvas.clientHeight.toString());
 
-        this.projectionMatrix = Matrix.perspectiveProjection(45, this._canvas.width / this._canvas.height, 1, 100);
-        this.viewMatrix = Matrix.create();
-        this.orthoMatrix = Matrix.orthoProjection(2, 2, 1000);
-        this._identity = Matrix.create();
+        this._identity = m4.identity();
+        // this.projectionMatrix = m4.perspective(fov * 2 * Math.PI / 180, this._canvas.clientWidth / this._canvas.clientHeight, zMin, zMax);
+        this.projectionMatrix = m4.perspectiveHorizontal(this._fov, this._canvas.clientWidth / this._canvas.clientHeight, this._zMin, this._zMax);
+        // Matrix.perspectiveProjection(this.projectionMatrix, fov, this._canvas.width / this._canvas.height, zMin, zMax);
+        this.viewMatrix = m4.identity();
+        // this.orthoMatrix = m4.identity();
+        this.orthoMatrix = m4.orthographicCanvas(canvas.clientWidth, canvas.clientHeight, this._zMax);
+        // Matrix.orthoProjection(this.orthoMatrix, canvas.width, canvas.height, zMax);
+        console.log('projection matrix: ');
+        console.dir(this.projectionMatrix);
 
         this._textures = {};
         this._meshes = [];
@@ -49,6 +77,14 @@ export default class Scene {
             'uloc_directionalLight': [1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3)],
             'uloc_directionalLightColor': [1, 1, 1],
         };
+    }
+
+    public get canvasWidth(): number {
+        return this._canvas.width;
+    }
+
+    public get canvasHeight(): number {
+        return this._canvas.height;
     }
 
     //
@@ -89,6 +125,8 @@ export default class Scene {
             if (Scene.isPowerOf2(image.width) && Scene.isPowerOf2(image.height)) {
                 // Yes, it's a power of 2. Generate mips.
                 gl.generateMipmap(gl.TEXTURE_2D);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
             } else {
                 // No, it's not a power of 2. Turn off mips and set
                 // wrapping to clamp to edge
@@ -97,6 +135,7 @@ export default class Scene {
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
             }
         };
+        image.crossOrigin = 'anonymous';
         image.src = url;
 
         this._textures[key] = texture;
@@ -126,6 +165,10 @@ export default class Scene {
         if (canvas.width !== width || canvas.height !== height) {
             canvas.width = width;
             canvas.height = height;
+            // this.projectionMatrix = m4.perspective(this._fov * 2 * Math.PI / 180, this._canvas.clientWidth / this._canvas.clientHeight, this._zMin, this._zMax);
+            m4.perspectiveHorizontal(this._fov, this._canvas.clientWidth / this._canvas.clientHeight, this._zMin, this._zMax, this.projectionMatrix);
+            this.viewMatrix = m4.identity();
+            m4.orthographicCanvas(canvas.clientWidth, canvas.clientHeight, this._zMax, this.orthoMatrix);
             return true;
         }
         return false;
@@ -275,22 +318,47 @@ export default class Scene {
         this._meshes = [];
     }
 
+    public getMesh(i:number) {
+        if(i >= 0 && i < this._meshes.length)
+            return this._meshes[i];
+        return null;
+    }
+
+    public getMeshByName(name:string) {
+        for (var i = 0; i < this._meshes.length; i++) {
+            if(this._meshes[i].name == name)
+                return this._meshes[i];
+        }
+        return null;
+    }
+
     public drawScene(time: number = 0) {
         var dt = time - this._time_old;
         this._time_old = time;
 
         var gl = this._gl;
 
-        this._resizeCanvasToDisplaySize();
+        if (this._resizeCanvasToDisplaySize()) {
+            this._onCanvasSizeChange.trigger({ width: this._canvas.width, height: this._canvas.height });
+        }
 
         gl.clearDepth(1.0);
         gl.viewport(0.0, 0.0, this._canvas.clientWidth, this._canvas.clientHeight);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        var u;
+		var up = [0, 1, 0];
 
+		// Compute the camera's matrix using look at.
+		var cameraMatrix = m4.lookAt(this.cameraPosition, this.cameraTarget, up);
+	
+		// Make a view matrix from the camera matrix
+		var viewMatrix = m4.inverse(cameraMatrix);
+        m4.copy(viewMatrix, this.viewMatrix);
+        
+        var u;
         for (var i = 0; i < this._meshes.length; i++) {
             var mesh = this._meshes[i];
+            if(!mesh.isVisible) continue;
 
             var shader = mesh.shader;
             u = this._uniforms['uloc_ambientLight'];

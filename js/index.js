@@ -1,16 +1,16 @@
 // Following http://www.tutorialspoint.com/webgl/webgl_modes_of_drawing.htm
-define(["require", "exports", "./Sphere", "./Matrix", "./Quad", "./Scene"], function (require, exports, Sphere_1, Matrix_1, Quad_1, Scene_1) {
+define(["require", "exports", "./Sphere", "./m4", "./Quad2D", "./Scene"], function (require, exports, Sphere_1, m4_1, Quad2D_1, Scene_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var App = /** @class */ (function () {
-        function App(canvas) {
+        function App(canvas, fovRad, zMin, zMax) {
             this._qualityData = [
                 { sectors: 10, stacks: 5 },
                 { sectors: 18, stacks: 9 },
                 { sectors: 36, stacks: 18 },
                 { sectors: 72, stacks: 36 },
             ];
-            this.scene = new Scene_1.default(canvas);
+            this.scene = new Scene_1.default(canvas, fovRad, zMin, zMax);
             this.canvas = canvas;
             var gl = this.scene._gl;
             this._config =
@@ -20,8 +20,8 @@ define(["require", "exports", "./Sphere", "./Matrix", "./Quad", "./Scene"], func
                     ZoomLevel: -15,
                     Rotation: {
                         X: 0.0000,
-                        Y: 0.0001,
-                        Z: 0
+                        Y: 0.0000,
+                        Z: 0.0001
                     }
                 };
         }
@@ -29,7 +29,10 @@ define(["require", "exports", "./Sphere", "./Matrix", "./Quad", "./Scene"], func
             // remove all existing meshes
             this.scene.destroyAllMeshes();
             // create meshes for the scene
-            var q = new Quad_1.default(2, 2);
+            // cover the canvas no matter what, keep square
+            // not quite centered, but it's ok
+            var largeDimension = Math.max(this.scene.canvasWidth, this.scene.canvasHeight);
+            var q = new Quad2D_1.default(largeDimension, largeDimension);
             var backdrop = this.scene.createMesh('backdrop');
             backdrop.isOpaque = true;
             backdrop.is2D = true;
@@ -40,9 +43,6 @@ define(["require", "exports", "./Sphere", "./Matrix", "./Quad", "./Scene"], func
             backdrop.texture = this.scene.getTexture('stars');
             backdrop.isFullyLit = false;
             backdrop.prepBuffers();
-            Matrix_1.default.scale(backdrop.modelMatrix, backdrop.modelMatrix, [1, 1, 0]);
-            Matrix_1.default.translate(backdrop.modelMatrix, backdrop.modelMatrix, [1, 1, 0]);
-            backdrop.updateNormalMatrix();
             var radius = 7.0;
             var sphere = new Sphere_1.default(radius, this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
             console.log(this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
@@ -54,9 +54,10 @@ define(["require", "exports", "./Sphere", "./Matrix", "./Quad", "./Scene"], func
             earth.indices = sphere.getIndices();
             earth.prepBuffers();
             earth.texture = this.scene.getTexture('earth');
-            Matrix_1.default.rotateX(earth.modelMatrix, 270 * Math.PI / 180);
-            Matrix_1.default.rotateY(earth.modelMatrix, 170 * Math.PI / 180);
-            earth.updateNormalMatrix();
+            earth.transform.translation[2] = 0;
+            earth.transform.rotation[0] = m4_1.default.deg2rad(-90);
+            earth.transform.rotation[2] = m4_1.default.deg2rad(170);
+            earth.updateTransform();
             var sphere2 = new Sphere_1.default(radius * 1.02, this._qualityData[this._config.Quality].sectors, this._qualityData[this._config.Quality].stacks);
             var clouds = this.scene.createMesh('clouds');
             clouds.isOpaque = false;
@@ -66,10 +67,9 @@ define(["require", "exports", "./Sphere", "./Matrix", "./Quad", "./Scene"], func
             clouds.indices = sphere2.getIndices();
             clouds.prepBuffers();
             clouds.texture = this.scene.getTexture('clouds');
-            Matrix_1.default.rotateX(clouds.modelMatrix, 270 * Math.PI / 180);
-            Matrix_1.default.rotateY(clouds.modelMatrix, 170 * Math.PI / 180);
-            Matrix_1.default.translate(clouds.modelMatrix, clouds.modelMatrix, [0, 0, 0]);
-            clouds.updateNormalMatrix();
+            clouds.transform.scale[0] = clouds.transform.scale[1] = clouds.transform.scale[2] = 1.02;
+            clouds.transform.rotation[0] = m4_1.default.deg2rad(-90);
+            clouds.transform.rotation[2] = m4_1.default.deg2rad(170);
             return {
                 meshes: [backdrop, earth, clouds]
             };
@@ -83,23 +83,37 @@ define(["require", "exports", "./Sphere", "./Matrix", "./Quad", "./Scene"], func
             var execAnimation = function (time) {
                 var dt = time - time_old;
                 time_old = time;
+                _this.scene.cameraPosition[2] = -_this._config.ZoomLevel;
                 // adjust zoom level
-                if (Math.abs(_this._config.ZoomLevel - zoomLevel_old) >= 0.01) {
-                    view_matrix[14] = view_matrix[14] + (zoomLevel_old * -1) + _this._config.ZoomLevel;
-                    zoomLevel_old = _this._config.ZoomLevel;
-                    console.log(_this._config.ZoomLevel);
-                }
-                // update mesh
-                _this.scene._meshes.forEach(function (mesh) {
-                    if (mesh.name != 'backdrop') {
-                        for (var axis in rotThetas) {
-                            var theta = rotThetas[axis];
-                            if (theta > 0.0 || theta < 0.0) {
-                                Matrix_1.default["rotate" + axis](mesh.modelMatrix, dt * theta);
-                            }
+                // if (Math.abs(this._config.ZoomLevel - zoomLevel_old) >= 0.01) {
+                // 	view_matrix[14] = view_matrix[14] + (zoomLevel_old * -1) + this._config.ZoomLevel;
+                // 	zoomLevel_old = this._config.ZoomLevel;
+                // 	console.log(this._config.ZoomLevel);
+                // }
+                // update meshes
+                var earth = _this.scene.getMeshByName('earth');
+                var clouds = _this.scene.getMeshByName('clouds');
+                for (var axis in rotThetas) {
+                    var theta = rotThetas[axis];
+                    if (theta > 0.0 || theta < 0.0) {
+                        var index = 0;
+                        switch (axis) {
+                            case 'X':
+                                index = 0;
+                                break;
+                            case 'Y':
+                                index = 1;
+                                break;
+                            case 'Z':
+                                index = 2;
+                                break;
                         }
+                        earth.transform.rotation[index] += dt * theta;
+                        if (clouds)
+                            clouds.transform.rotation[index] = earth.transform.rotation[index];
+                        // (<any>Matrix)[`rotate${axis}`](mesh.modelMatrix, dt * theta);
                     }
-                });
+                }
                 _this.scene.drawScene(time);
                 window.requestAnimationFrame(execAnimation);
             };
@@ -147,7 +161,7 @@ define(["require", "exports", "./Sphere", "./Matrix", "./Quad", "./Scene"], func
         document.getElementById(inputId).value = prepend + document.getElementById(sliderId).value;
     }
     function startApp() {
-        var app = new App(document.getElementById('canvas'));
+        var app = new App(document.getElementById('canvas'), m4_1.default.deg2rad(45), 0.1, 1000);
         var scene = app.scene;
         scene.loadTexture('./img/stars.png', 'stars');
         scene.loadTexture('./img/earth.png', 'earth');

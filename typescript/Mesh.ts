@@ -1,5 +1,7 @@
-import Matrix from "./Matrix";
 import IShaderProgram from "./IShaderProgram";
+import TRS from "./TRS";
+import m4 from './m4';
+import Matrix from './Matrix';
 
 export default class Mesh {
 	public gl: WebGLRenderingContext;
@@ -23,6 +25,7 @@ export default class Mesh {
 	public isOpaque: Boolean;
 	public is2D: boolean;
 	public isFullyLit: boolean;
+	public isVisible:boolean;
 
 	public name: string;
 
@@ -31,6 +34,21 @@ export default class Mesh {
 	public aloc_uv: number;
 	public uloc_sampler: WebGLUniformLocation;
 	public uloc_fullyLit: WebGLUniformLocation;
+
+	public transform:TRS;
+	public parent:Mesh;
+	public children:Mesh[];
+
+	constructor(name: string, gl: WebGLRenderingContext) {
+		this.gl = gl;
+		this.name = name;
+		this.modelMatrix = m4.identity();
+		this.normalMatrix = m4.identity();
+		this.is2D = false;
+		this.isFullyLit = false;
+		this.transform = new TRS();
+		this.isVisible = true;
+	}
 
 	public prepBuffers() {
 		var gl = this.gl;
@@ -67,9 +85,48 @@ export default class Mesh {
 		gl.deleteBuffer(this.indexBuffer);
 	}
 
+	// public updateWorldMatrix(parentWorldMatrix?: Float32Array) {
+    //     var transform = this.transform;
+    //     if (transform) {
+    //         transform.getMatrix(this.localMatrix);
+    //     }
+
+    //     if (parentWorldMatrix) {
+    //         // a matrix was passed in so do the math
+    //         m4.multiply(parentWorldMatrix, this.localMatrix, this.worldMatrix);
+    //     } else {
+    //         // no matrix was passed in so just copy local to world
+    //         m4.copy(this.localMatrix, this.worldMatrix);
+    //     }
+
+    //     // now process all the children
+    //     var worldMatrix = this.worldMatrix;
+    //     this.children.forEach(function (child) {
+    //         child.updateWorldMatrix(worldMatrix);
+    //     });
+	// }
+	
+    // public setParent(parent: Mesh) {
+    //     // remove us from our parent
+    //     if (this.parent) {
+    //         var ndx = this.parent.children.indexOf(this);
+    //         if (ndx >= 0) {
+    //             this.parent.children.splice(ndx, 1);
+    //         }
+    //     }
+
+    //     // Add us to our new parent
+    //     if (parent) {
+    //         parent.children.push(this);
+    //     }
+    //     this.parent = parent;
+    // };
+
 	public beforeDraw() {
 		var gl = this.gl;
-		this.updateNormalMatrix();
+
+		this.updateTransform();
+
 		gl.uniformMatrix4fv(this.shader.uloc_Model, false, this.modelMatrix);
 		gl.uniformMatrix4fv(this.shader.uloc_Normal, false, this.normalMatrix);
 
@@ -116,17 +173,16 @@ export default class Mesh {
 		gl.drawElements(mode, this.indices.length, gl.UNSIGNED_SHORT, 0);
 	}
 
-	public updateNormalMatrix() {
-		Matrix.invert(this.normalMatrix, this.modelMatrix);
-		Matrix.transpose(this.normalMatrix, this.normalMatrix);
-	}
+	public updateTransform() {
+		// copy transforms into model matrix
+		this.transform.getMatrix(this.modelMatrix);
 
-	constructor(name: string, gl: WebGLRenderingContext) {
-		this.gl = gl;
-		this.name = name;
-		this.modelMatrix = Matrix.create();
-		this.normalMatrix = Matrix.create();
-		this.is2D = false;
-		this.isFullyLit = false;
+		// NOTE: not all of the m4 operations are safe to pass self as dst.....
+
+		// recompute normal matrix
+		this.normalMatrix = m4.inverse(this.modelMatrix);
+		this.normalMatrix = m4.transpose(this.normalMatrix);
+		// Matrix.invert(this.normalMatrix, this.modelMatrix);
+		// Matrix.transpose(this.normalMatrix, this.normalMatrix);
 	}
 }

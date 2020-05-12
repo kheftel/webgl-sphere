@@ -1,4 +1,4 @@
-export default class Quad {
+export default class Quad2D {
 	public Points: { x: number; y: number; z: number }[];
 	public Normals: { x: number, y: number, z: number }[];
 	public TextureCoords: { u: number, v: number }[];
@@ -35,10 +35,14 @@ export default class Quad {
 		this.TextureCoords = [];
         this.TriangleIndices = [];
         
-        this._addVertex(-this._width / 2, this._height / 2, 0);
-        this._addVertex(this._width / 2, this._height / 2, 0);
-        this._addVertex(-this._width / 2, -this._height / 2, 0);
-        this._addVertex(this._width / 2, -this._height / 2, 0);
+        this._addVertex(0, 0, 0);
+        this._addVertex(this._width, 0, 0);
+        this._addVertex(0, this._height, 0);
+        this._addVertex(this._width, this._height, 0);
+        // this._addVertex(-this._width / 2, this._height / 2, 0);
+        // this._addVertex(this._width / 2, this._height / 2, 0);
+        // this._addVertex(-this._width / 2, -this._height / 2, 0);
+        // this._addVertex(this._width / 2, -this._height / 2, 0);
 
         this._addNormal(0, 0, 1);
         this._addNormal(0, 0, 1);

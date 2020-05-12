@@ -7,22 +7,31 @@ define(["require", "exports"], function (require, exports) {
         Matrix.create = function () {
             return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
         };
-        Matrix.perspectiveProjection = function (angle, a, zMin, zMax) {
-            var ang = Math.tan((angle * .5) * Math.PI / 180);
-            return new Float32Array([
+        Matrix.perspectiveProjection = function (out, angleDeg, a, zMin, zMax) {
+            var ang = Math.tan((angleDeg * .5) * Math.PI / 180);
+            var tmp = new Float32Array([
                 0.5 / ang, 0, 0, 0,
                 0, 0.5 * a / ang, 0, 0,
                 0, 0, -(zMax + zMin) / (zMax - zMin), -1,
                 0, 0, (-2 * zMax * zMin) / (zMax - zMin), 0
             ]);
+            for (var i = 0; i < tmp.length; i++) {
+                out[i] = tmp[i];
+            }
+            return out;
         };
-        Matrix.orthoProjection = function (width, height, depth) {
-            return new Float32Array([
+        Matrix.orthoProjection = function (out, width, height, depth) {
+            // note: y axis is flipped to match canvas coord system
+            var tmp = new Float32Array([
                 2 / width, 0, 0, 0,
                 0, -2 / height, 0, 0,
                 0, 0, 2 / depth, 0,
                 -1, 1, 0, 1,
             ]);
+            for (var i = 0; i < tmp.length; i++) {
+                out[i] = tmp[i];
+            }
+            return out;
         };
         Matrix.clone = function (a) {
             var out = Matrix.create();
@@ -294,6 +303,32 @@ define(["require", "exports"], function (require, exports) {
             out[13] = a[13];
             out[14] = a[14];
             out[15] = a[15];
+            return out;
+        };
+        /**
+         * Takes a 4-by-4 matrix and a vector with 3 entries,
+         * interprets the vector as a point, transforms that point by the matrix, and
+         * returns the result as a vector with 3 entries.
+         * @param out where to store result
+         * @param m The matrix.
+         * @param v The point.
+         */
+        Matrix.transformPoint = function (out, m, v) {
+            var v0 = v[0];
+            var v1 = v[1];
+            var v2 = v[2];
+            var d = v0 * m[0 * 4 + 3] + v1 * m[1 * 4 + 3] + v2 * m[2 * 4 + 3] + m[3 * 4 + 3];
+            console.log(d);
+            out[0] = (v0 * m[0 * 4 + 0] + v1 * m[1 * 4 + 0] + v2 * m[2 * 4 + 0] + m[3 * 4 + 0]) / d;
+            out[1] = (v0 * m[0 * 4 + 1] + v1 * m[1 * 4 + 1] + v2 * m[2 * 4 + 1] + m[3 * 4 + 1]) / d;
+            out[2] = (v0 * m[0 * 4 + 2] + v1 * m[1 * 4 + 2] + v2 * m[2 * 4 + 2] + m[3 * 4 + 2]) / d;
+            return out;
+        };
+        Matrix.multiplyV4 = function (out, m, v) {
+            out[0] = v[0] * m[0] + v[1] * m[1] + v[2] * m[2] + v[3] * m[3];
+            out[1] = v[0] * m[4] + v[1] * m[5] + v[2] * m[6] + v[3] * m[7];
+            out[2] = v[0] * m[8] + v[1] * m[9] + v[2] * m[10] + v[3] * m[11];
+            out[3] = v[0] * m[12] + v[1] * m[13] + v[2] * m[14] + v[3] * m[15];
             return out;
         };
         return Matrix;
